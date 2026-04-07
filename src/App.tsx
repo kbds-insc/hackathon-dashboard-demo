@@ -1,6 +1,9 @@
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
-import Header from './components/layout/Header';
-import AdminPage from './pages/admin';
+import Dashboard from './pages/admin/Dashboard';
+import Participants from './pages/admin/Participants';
+import Notices from './pages/admin/Notices';
+import Submissions from './pages/admin/Submissions';
+import Scoring from './pages/admin/Scoring';
 import ParticipantPage from './pages/participant';
 
 function Home() {
@@ -31,10 +34,15 @@ function Home() {
 export default function App() {
   return (
     <BrowserRouter>
-      <Header />
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/admin" element={<AdminPage />} />
+        {/* Admin */}
+        <Route path="/admin" element={<Dashboard />} />
+        <Route path="/admin/participants" element={<Participants />} />
+        <Route path="/admin/notices" element={<Notices />} />
+        <Route path="/admin/submissions" element={<Submissions />} />
+        <Route path="/admin/scores" element={<Scoring />} />
+        {/* Participant */}
         <Route path="/participant" element={<ParticipantPage />} />
       </Routes>
     </BrowserRouter>
