@@ -1,10 +1,16 @@
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
+// Admin pages
 import Dashboard from './pages/admin/Dashboard';
 import Participants from './pages/admin/Participants';
-import Notices from './pages/admin/Notices';
+import AdminNotices from './pages/admin/Notices';
 import Submissions from './pages/admin/Submissions';
 import Scoring from './pages/admin/Scoring';
-import ParticipantPage from './pages/participant';
+// Participant pages
+import ParticipantDashboard from './pages/participant/Dashboard';
+import Timeline from './pages/participant/Timeline';
+import ParticipantNotices from './pages/participant/Notices';
+import Submit from './pages/participant/Submit';
+import Notifications from './pages/participant/Notifications';
 
 function Home() {
   return (
@@ -39,11 +45,15 @@ export default function App() {
         {/* Admin */}
         <Route path="/admin" element={<Dashboard />} />
         <Route path="/admin/participants" element={<Participants />} />
-        <Route path="/admin/notices" element={<Notices />} />
+        <Route path="/admin/notices" element={<AdminNotices />} />
         <Route path="/admin/submissions" element={<Submissions />} />
         <Route path="/admin/scores" element={<Scoring />} />
         {/* Participant */}
-        <Route path="/participant" element={<ParticipantPage />} />
+        <Route path="/participant" element={<ParticipantDashboard />} />
+        <Route path="/participant/schedule" element={<Timeline />} />
+        <Route path="/participant/notices" element={<ParticipantNotices />} />
+        <Route path="/participant/submit" element={<Submit />} />
+        <Route path="/participant/notifications" element={<Notifications />} />
       </Routes>
     </BrowserRouter>
   );
