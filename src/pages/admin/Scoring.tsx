@@ -1,17 +1,16 @@
+import { Link } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
 import Card from '../../components/ui/Card';
-import { teams, scores } from '../../data/mockData';
-import { Trophy } from 'lucide-react';
-
-const CRITERIA = [
-  { label: '창의성', points: 30, textColor: 'text-purple-600', bg: 'bg-purple-50' },
-  { label: '완성도', points: 40, textColor: 'text-blue-600', bg: 'bg-blue-50' },
-  { label: '발표력', points: 30, textColor: 'text-green-600', bg: 'bg-green-50' },
-] as const;
+import { teams } from '../../data/mockData';
+import { SCORE_CRITERIA } from '../../data/scoreStore';
+import { useScores } from '../../hooks/useScores';
+import { Trophy, Pencil } from 'lucide-react';
 
 const MAX_SCORE = 100;
 
 export default function Scoring() {
+  const scores = useScores();
+
   const ranked = [...scores]
     .sort((a, b) => b.total - a.total)
     .map((s, idx) => ({
@@ -22,16 +21,36 @@ export default function Scoring() {
 
   return (
     <AdminLayout>
+      {/* ── 헤더 ── */}
+      <div className="flex items-center justify-between mb-6">
+        <div /> {/* spacer */}
+        <Link
+          to="/admin/score-input"
+          className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+        >
+          <Pencil className="w-4 h-4" />
+          점수 입력
+        </Link>
+      </div>
+
       {/* ── 평가 항목 안내 ── */}
       <div className="grid grid-cols-3 gap-3 mb-6">
-        {CRITERIA.map((c) => (
-          <div key={c.label} className={`${c.bg} rounded-xl p-3 sm:p-5 text-center`}>
-            <p className={`text-2xl sm:text-3xl font-bold ${c.textColor}`}>{c.points}</p>
-            <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-              {c.label} <span className="hidden sm:inline">점</span>
-            </p>
-          </div>
-        ))}
+        {SCORE_CRITERIA.map((c) => {
+          const colorMap = {
+            creativity:   { text: 'text-purple-600', bg: 'bg-purple-50' },
+            completion:   { text: 'text-blue-600',   bg: 'bg-blue-50' },
+            presentation: { text: 'text-green-600',  bg: 'bg-green-50' },
+          } as const;
+          const color = colorMap[c.key];
+          return (
+            <div key={c.key} className={`${color.bg} rounded-xl p-3 sm:p-5 text-center`}>
+              <p className={`text-2xl sm:text-3xl font-bold ${color.text}`}>{c.max}</p>
+              <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+                {c.label} <span className="hidden sm:inline">점</span>
+              </p>
+            </div>
+          );
+        })}
       </div>
 
       {/* ── 데스크탑 테이블 ── */}
@@ -43,9 +62,14 @@ export default function Scoring() {
                 <tr className="border-b border-gray-100 text-xs text-gray-400 font-medium uppercase tracking-wide">
                   <th className="pb-3 pr-4 text-left w-14">순위</th>
                   <th className="pb-3 pr-4 text-left">팀명</th>
-                  <th className="pb-3 pr-4 text-right text-purple-500">창의성</th>
-                  <th className="pb-3 pr-4 text-right text-blue-500">완성도</th>
-                  <th className="pb-3 pr-4 text-right text-green-500">발표력</th>
+                  {SCORE_CRITERIA.map((c) => (
+                    <th key={c.key} className={`pb-3 pr-4 text-right ${
+                      c.key === 'creativity' ? 'text-purple-500' :
+                      c.key === 'completion' ? 'text-blue-500' : 'text-green-500'
+                    }`}>
+                      {c.label}
+                    </th>
+                  ))}
                   <th className="pb-3 text-right text-gray-600">합계</th>
                 </tr>
               </thead>
@@ -55,9 +79,7 @@ export default function Scoring() {
                   return (
                     <tr
                       key={row.teamId}
-                      className={`transition-colors ${
-                        isFirst ? 'bg-yellow-50' : 'hover:bg-gray-50'
-                      }`}
+                      className={`transition-colors ${isFirst ? 'bg-yellow-50' : 'hover:bg-gray-50'}`}
                     >
                       <td className="py-3.5 pr-4">
                         {isFirst ? (
@@ -78,12 +100,10 @@ export default function Scoring() {
                       <td className="py-3.5 pr-4 text-right text-green-600 font-medium">
                         {row.presentation || <span className="text-gray-300">-</span>}
                       </td>
-                      <td
-                        className={`py-3.5 text-right font-bold text-base ${
-                          isFirst ? 'text-yellow-600' : 'text-gray-800'
-                        }`}
-                      >
-                        {row.total || <span className="text-gray-300 font-normal text-sm">미제출</span>}
+                      <td className={`py-3.5 text-right font-bold text-base ${
+                        isFirst ? 'text-yellow-600' : 'text-gray-800'
+                      }`}>
+                        {row.total || <span className="text-gray-300 font-normal text-sm">미입력</span>}
                       </td>
                     </tr>
                   );
@@ -102,9 +122,7 @@ export default function Scoring() {
             <div
               key={row.teamId}
               className={`rounded-xl border p-4 ${
-                isFirst
-                  ? 'bg-yellow-50 border-yellow-200'
-                  : 'bg-white border-gray-100'
+                isFirst ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-100'
               }`}
             >
               <div className="flex items-center justify-between mb-3">
@@ -115,11 +133,9 @@ export default function Scoring() {
                     <span className="text-xs text-gray-400">{row.rank}위</span>
                   )}
                 </div>
-                <span
-                  className={`text-2xl font-bold ${
-                    isFirst ? 'text-yellow-600' : row.total > 0 ? 'text-gray-800' : 'text-gray-300'
-                  }`}
-                >
+                <span className={`text-2xl font-bold ${
+                  isFirst ? 'text-yellow-600' : row.total > 0 ? 'text-gray-800' : 'text-gray-300'
+                }`}>
                   {row.total > 0 ? row.total : '-'}
                 </span>
               </div>
@@ -139,14 +155,14 @@ export default function Scoring() {
                   </div>
                 </div>
               ) : (
-                <p className="text-xs text-gray-400">미제출 — 점수 없음</p>
+                <p className="text-xs text-gray-400">점수 미입력</p>
               )}
             </div>
           );
         })}
       </div>
 
-      {/* ── 팀별 점수 막대 차트 ── */}
+      {/* ── 막대 차트 ── */}
       <Card title="팀별 합계 점수 비교">
         <div className="space-y-4">
           {ranked.map((row) => {
@@ -160,7 +176,7 @@ export default function Scoring() {
                     <span className="font-medium text-gray-700">{row.team.name}</span>
                   </div>
                   <span className="text-gray-400 text-xs">
-                    {row.total > 0 ? `${row.total} / ${MAX_SCORE}점` : '미제출'}
+                    {row.total > 0 ? `${row.total} / ${MAX_SCORE}점` : '미입력'}
                   </span>
                 </div>
                 <div className="h-7 bg-gray-100 rounded-lg overflow-hidden">
@@ -178,7 +194,7 @@ export default function Scoring() {
           })}
         </div>
         <p className="text-xs text-gray-400 mt-4 text-right">
-          만점 기준: 창의성 30 + 완성도 40 + 발표력 30 = 100점
+          만점: 창의성 {SCORE_CRITERIA[0].max} + 완성도 {SCORE_CRITERIA[1].max} + 발표력 {SCORE_CRITERIA[2].max} = {MAX_SCORE}점
         </p>
       </Card>
     </AdminLayout>

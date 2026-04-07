@@ -5,6 +5,7 @@ import Participants from './pages/admin/Participants';
 import AdminNotices from './pages/admin/Notices';
 import Submissions from './pages/admin/Submissions';
 import Scoring from './pages/admin/Scoring';
+import ScoreInput from './pages/admin/ScoreInput';
 // Participant pages
 import ParticipantDashboard from './pages/participant/Dashboard';
 import Timeline from './pages/participant/Timeline';
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="/admin/notices" element={<AdminNotices />} />
         <Route path="/admin/submissions" element={<Submissions />} />
         <Route path="/admin/scores" element={<Scoring />} />
+        <Route path="/admin/score-input" element={<ScoreInput />} />
         {/* Participant */}
         <Route path="/participant" element={<ParticipantDashboard />} />
         <Route path="/participant/schedule" element={<Timeline />} />
