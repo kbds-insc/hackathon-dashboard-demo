@@ -31,7 +31,7 @@ export default function ScoreInput() {
   const judgeId = user?.id ?? '';
   const judgeName = user?.name ?? '';
 
-  const judgeScores = useJudgeScores(judgeId);
+  const judgeScores = useJudgeScores(judgeId, judgeName);
 
   const [draft, setDraft] = useState<DraftScores>(() =>
     buildDraft(judgeScores)
@@ -56,18 +56,28 @@ export default function ScoreInput() {
     });
   };
 
-  const handleSave = (teamId: string) => {
+  const handleSave = async (teamId: string) => {
     const d = draft[teamId] ?? { creativity: 0, completion: 0, presentation: 0 };
-    updateScore(judgeId, judgeName, teamId, d);
-    setSaved((prev) => new Set(prev).add(teamId));
+    try {
+      await updateScore(judgeId, judgeName, teamId, d);
+      setSaved((prev) => new Set(prev).add(teamId));
+    } catch {
+      console.error('점수 저장 실패');
+    }
   };
 
-  const handleSaveAll = () => {
-    teams.forEach((t) => {
-      const d = draft[t.id] ?? { creativity: 0, completion: 0, presentation: 0 };
-      updateScore(judgeId, judgeName, t.id, d);
-    });
-    setSaved(new Set(teams.map((t) => t.id)));
+  const handleSaveAll = async () => {
+    try {
+      await Promise.all(
+        teams.map((t) => {
+          const d = draft[t.id] ?? { creativity: 0, completion: 0, presentation: 0 };
+          return updateScore(judgeId, judgeName, t.id, d);
+        })
+      );
+      setSaved(new Set(teams.map((t) => t.id)));
+    } catch {
+      console.error('전체 점수 저장 실패');
+    }
   };
 
   const getTotal = (teamId: string) => {

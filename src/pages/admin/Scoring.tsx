@@ -1,21 +1,31 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
 import Card from '../../components/ui/Card';
 import { useTeams } from '../../hooks/useTeams';
 import { useScores } from '../../hooks/useScores';
-import { SCORE_CRITERIA, MOCK_JUDGES, getAllJudgeScores } from '../../data/scoreStore';
+import { useAllJudgeScores } from '../../hooks/useAllJudgeScores';
+import { SCORE_CRITERIA } from '../../data/scoreStore';
 import { Trophy, Pencil, ChevronDown, ChevronUp, Users } from 'lucide-react';
 
 const MAX_SCORE = 100;
-const TOTAL_JUDGES = MOCK_JUDGES.length;
 
 export default function Scoring() {
   const teams = useTeams();
   const scores = useScores();
+  const allJudgeScores = useAllJudgeScores();
   const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
 
-  const allJudgeScores = getAllJudgeScores();
+  // 점수를 입력한 심사위원 목록 (judgeId 기준 dedup)
+  const judges = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+    allJudgeScores.forEach((s) => {
+      if (!map.has(s.judgeId)) map.set(s.judgeId, { id: s.judgeId, name: s.judgeName });
+    });
+    return [...map.values()];
+  }, [allJudgeScores]);
+
+  const TOTAL_JUDGES = judges.length || 1; // 0 나누기 방지
 
   const ranked = [...scores]
     .sort((a, b) => b.total - a.total)
@@ -35,7 +45,7 @@ export default function Scoring() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <Users className="w-4 h-4" />
-          <span>심사위원 {TOTAL_JUDGES}명 · 집계 방식: 평균</span>
+          <span>심사위원 {judges.length}명 입력 · 집계 방식: 평균</span>
         </div>
         <Link
           to="/admin/score-input"
@@ -146,7 +156,7 @@ export default function Scoring() {
                           <td colSpan={8} className="px-4 py-3">
                             <p className="text-xs font-medium text-gray-500 mb-2">심사위원별 점수</p>
                             <div className="grid grid-cols-3 gap-2">
-                              {MOCK_JUDGES.map((judge) => {
+                              {judges.map((judge) => {
                                 const js = teamJudgeScores.find((s) => s.judgeId === judge.id);
                                 const hasScore = js && (js.creativity > 0 || js.completion > 0 || js.presentation > 0);
                                 return (
@@ -243,7 +253,7 @@ export default function Scoring() {
               {isExpanded && (
                 <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 rounded-b-xl">
                   <div className="space-y-2">
-                    {MOCK_JUDGES.map((judge) => {
+                    {judges.map((judge) => {
                       const js = teamJudgeScores.find((s) => s.judgeId === judge.id);
                       const hasScore = js && (js.creativity > 0 || js.completion > 0 || js.presentation > 0);
                       return (
