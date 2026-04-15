@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react';
-import { getScores, subscribeScores } from '../data/scoreStore';
-import type { Score } from '../data/mockData';
+import { getAggregatedScores, subscribeScores } from '../data/scoreStore';
+import type { AggregatedScore } from '../data/scoreStore';
 
-export function useScores(): Score[] {
-  const [scores, setScores] = useState<Score[]>(getScores);
-
+export function useScores(): AggregatedScore[] {
+  const [scores, setScores] = useState<AggregatedScore[]>(getAggregatedScores);
   useEffect(() => {
-    return subscribeScores(() => setScores([...getScores()]));
+    return subscribeScores(() => setScores([...getAggregatedScores()]));
   }, []);
-
   return scores;
 }

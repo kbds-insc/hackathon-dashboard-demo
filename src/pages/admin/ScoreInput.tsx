@@ -3,15 +3,24 @@ import { Link } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
 import Card from '../../components/ui/Card';
 import { useTeams } from '../../hooks/useTeams';
-import { getScores, updateScore, SCORE_CRITERIA } from '../../data/scoreStore';
-import { useScores } from '../../hooks/useScores';
-import { ArrowLeft, Save, CheckCircle2 } from 'lucide-react';
+import { useJudgeScores } from '../../hooks/useJudgeScores';
+import {
+  SCORE_CRITERIA,
+  MOCK_JUDGES,
+  updateScore,
+  getScoresByJudge,
+} from '../../data/scoreStore';
+import { ArrowLeft, Save, CheckCircle2, User } from 'lucide-react';
 
-type DraftScores = Record<string, { creativity: number; completion: number; presentation: number }>;
+type TeamDraft = { creativity: number; completion: number; presentation: number };
+type DraftScores = Record<string, TeamDraft>;
+// 심사위원별 draft를 하나의 Record에 저장 (useEffect 없이 judge 전환 시 독립 유지)
+type AllDrafts = Record<string, DraftScores>;
+type AllSaved = Record<string, Set<string>>;
 
-function buildDraft(scores: ReturnType<typeof getScores>): DraftScores {
+function buildDraft(judgeId: string): DraftScores {
   return Object.fromEntries(
-    scores.map((s) => [
+    getScoresByJudge(judgeId).map((s) => [
       s.teamId,
       { creativity: s.creativity, completion: s.completion, presentation: s.presentation },
     ])
@@ -20,9 +29,21 @@ function buildDraft(scores: ReturnType<typeof getScores>): DraftScores {
 
 export default function ScoreInput() {
   const teams = useTeams();
-  const scores = useScores();
-  const [draft, setDraft] = useState<DraftScores>(() => buildDraft(getScores()));
-  const [saved, setSaved] = useState<Set<string>>(new Set());
+
+  // ── 임시 심사위원 선택 (Phase 2에서 AuthContext로 교체) ──────
+  const [currentJudgeId, setCurrentJudgeId] = useState(MOCK_JUDGES[0].id);
+  const currentJudge = MOCK_JUDGES.find((j) => j.id === currentJudgeId)!;
+
+  const judgeScores = useJudgeScores(currentJudgeId);
+
+  // 심사위원별 draft/saved를 하나의 Record에 저장 → useEffect 불필요
+  const [allDrafts, setAllDrafts] = useState<AllDrafts>(() => ({
+    [MOCK_JUDGES[0].id]: buildDraft(MOCK_JUDGES[0].id),
+  }));
+  const [allSaved, setAllSaved] = useState<AllSaved>({});
+
+  const draft = allDrafts[currentJudgeId] ?? buildDraft(currentJudgeId);
+  const saved = allSaved[currentJudgeId] ?? new Set<string>();
 
   const setField = (
     teamId: string,
@@ -31,22 +52,42 @@ export default function ScoreInput() {
   ) => {
     const max = SCORE_CRITERIA.find((c) => c.key === field)!.max;
     const val = Math.min(max, Math.max(0, Number(raw) || 0));
-    setDraft((prev) => ({ ...prev, [teamId]: { ...(prev[teamId] ?? { creativity: 0, completion: 0, presentation: 0 }), [field]: val } }));
-    setSaved((prev) => { const next = new Set(prev); next.delete(teamId); return next; });
+    setAllDrafts((prev) => {
+      const cur = prev[currentJudgeId] ?? buildDraft(currentJudgeId);
+      return {
+        ...prev,
+        [currentJudgeId]: {
+          ...cur,
+          [teamId]: { ...(cur[teamId] ?? { creativity: 0, completion: 0, presentation: 0 }), [field]: val },
+        },
+      };
+    });
+    setAllSaved((prev) => {
+      const next = new Set(prev[currentJudgeId] ?? []);
+      next.delete(teamId);
+      return { ...prev, [currentJudgeId]: next };
+    });
   };
 
   const handleSave = (teamId: string) => {
     const d = draft[teamId] ?? { creativity: 0, completion: 0, presentation: 0 };
-    updateScore(teamId, d);
-    setSaved((prev) => new Set(prev).add(teamId));
+    updateScore(currentJudgeId, currentJudge.name, teamId, d);
+    setAllSaved((prev) => {
+      const next = new Set(prev[currentJudgeId] ?? []);
+      next.add(teamId);
+      return { ...prev, [currentJudgeId]: next };
+    });
   };
 
   const handleSaveAll = () => {
     teams.forEach((t) => {
       const d = draft[t.id] ?? { creativity: 0, completion: 0, presentation: 0 };
-      updateScore(t.id, d);
+      updateScore(currentJudgeId, currentJudge.name, t.id, d);
     });
-    setSaved(new Set(teams.map((t) => t.id)));
+    setAllSaved((prev) => ({
+      ...prev,
+      [currentJudgeId]: new Set(teams.map((t) => t.id)),
+    }));
   };
 
   const getTotal = (teamId: string) => {
@@ -55,7 +96,7 @@ export default function ScoreInput() {
   };
 
   const isChanged = (teamId: string) => {
-    const original = scores.find((s) => s.teamId === teamId);
+    const original = judgeScores.find((s) => s.teamId === teamId);
     if (!original) return true;
     const d = draft[teamId] ?? { creativity: 0, completion: 0, presentation: 0 };
     return (
@@ -87,6 +128,30 @@ export default function ScoreInput() {
           <Save className="w-4 h-4" />
           전체 저장
         </button>
+      </div>
+
+      {/* ── 심사위원 선택 (임시 — Phase 2에서 로그인으로 교체) ── */}
+      <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+        <div className="flex items-center gap-2 mb-3">
+          <User className="w-4 h-4 text-amber-600" />
+          <span className="text-sm font-medium text-amber-800">심사위원 선택</span>
+          <span className="text-xs text-amber-500 ml-auto">* 로그인 구현 후 자동 식별로 교체됩니다</span>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {MOCK_JUDGES.map((judge) => (
+            <button
+              key={judge.id}
+              onClick={() => setCurrentJudgeId(judge.id)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                currentJudgeId === judge.id
+                  ? 'bg-[#80766b] text-white'
+                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {judge.name}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── 평가 기준 안내 ── */}
@@ -123,7 +188,6 @@ export default function ScoreInput() {
                   const total = getTotal(team.id);
                   const isSaved = saved.has(team.id);
                   const changed = isChanged(team.id);
-
                   return (
                     <tr key={team.id} className="hover:bg-gray-50 transition-colors">
                       <td className="py-3.5 pr-4 font-medium text-gray-800">{team.name}</td>
@@ -140,9 +204,7 @@ export default function ScoreInput() {
                         </td>
                       ))}
                       <td className="py-3.5 pr-4 text-center">
-                        <span className={`font-bold text-base ${
-                          total === 0 ? 'text-gray-300' : 'text-gray-800'
-                        }`}>
+                        <span className={`font-bold text-base ${total === 0 ? 'text-gray-300' : 'text-gray-800'}`}>
                           {total}
                         </span>
                       </td>
@@ -178,19 +240,14 @@ export default function ScoreInput() {
           const total = getTotal(team.id);
           const isSaved = saved.has(team.id);
           const changed = isChanged(team.id);
-
           return (
             <Card key={team.id}>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-gray-800">{team.name}</h3>
-                <span className={`text-2xl font-bold ${
-                  total === 0 ? 'text-gray-200' : 'text-gray-800'
-                }`}>
-                  {total}
-                  <span className="text-sm font-normal text-gray-400">점</span>
+                <span className={`text-2xl font-bold ${total === 0 ? 'text-gray-200' : 'text-gray-800'}`}>
+                  {total}<span className="text-sm font-normal text-gray-400">점</span>
                 </span>
               </div>
-
               <div className="space-y-3">
                 {SCORE_CRITERIA.map((c) => (
                   <div key={c.key} className="flex items-center gap-3">
@@ -215,7 +272,6 @@ export default function ScoreInput() {
                   </div>
                 ))}
               </div>
-
               <div className="mt-4 pt-3 border-t border-gray-100">
                 {isSaved && !changed ? (
                   <div className="flex items-center justify-center gap-1.5 text-sm text-green-600">
