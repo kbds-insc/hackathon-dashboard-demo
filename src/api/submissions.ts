@@ -44,6 +44,12 @@ function fromDB(row: DBSubmission): Submission {
   };
 }
 
+export async function apiFetchAllSubmissions(): Promise<Submission[]> {
+  const { data, error } = await supabase.from('submissions').select('*');
+  if (error) throw error;
+  return ((data ?? []) as DBSubmission[]).map(fromDB);
+}
+
 export async function apiFetchSubmission(teamId: string): Promise<Submission | null> {
   const { data, error } = await supabase
     .from('submissions')
