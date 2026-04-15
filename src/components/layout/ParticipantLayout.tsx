@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Users, Calendar, Megaphone, Upload, Bell, LogOut } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { useCurrentParticipant } from '../../hooks/useCurrentParticipant';
 import { useNotifications } from '../../hooks/useNotifications';
 

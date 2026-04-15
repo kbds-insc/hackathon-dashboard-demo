@@ -1,31 +1,31 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Lock,
+  Pencil,
+  Plus,
+  Search,
+  Shuffle,
+  Trash2,
+  Unlock,
+  Users,
+  X,
+} from 'lucide-react';
 import AdminLayout from '../../components/layout/AdminLayout';
 import Card from '../../components/ui/Card';
 import { useParticipants } from '../../hooks/useParticipants';
 import { useTeams } from '../../hooks/useTeams';
 import {
   addParticipant,
-  updateParticipant,
-  deleteParticipant,
   addTeam,
-  updateTeam,
+  autoMatch,
+  deleteParticipant,
   deleteTeam,
   toggleTeamLock,
-  autoMatch,
+  updateParticipant,
+  updateTeam,
 } from '../../data/hackathonStore';
-import type { AutoMatchOptions } from '../../data/hackathonStore';
+import type { AutoMatchOptions, Team } from '../../data/hackathonStore';
 import type { Participant } from '../../data/mockData';
-import {
-  Search,
-  Plus,
-  Pencil,
-  Trash2,
-  Lock,
-  Unlock,
-  Users,
-  X,
-  Shuffle,
-} from 'lucide-react';
 
 type Tab = 'participants' | 'teams';
 
@@ -43,7 +43,27 @@ interface TeamFormState {
   idea: string;
 }
 
-const EMPTY_P_FORM: ParticipantFormState = {
+interface TeamAssignmentState {
+  search: string;
+  selectedParticipantIds: string[];
+  checkedCandidateIds: string[];
+}
+
+interface ToastState {
+  visible: boolean;
+  message: string;
+}
+
+interface ParticipantDraftRow {
+  key: string;
+  id?: string;
+  mode: 'new' | 'edit';
+  form: ParticipantFormState;
+  errors: Partial<Record<keyof ParticipantFormState, string>>;
+  teamLocked: boolean;
+}
+
+const EMPTY_PARTICIPANT_FORM: ParticipantFormState = {
   name: '',
   email: '',
   team: '',
@@ -52,36 +72,37 @@ const EMPTY_P_FORM: ParticipantFormState = {
   status: 'pending',
 };
 
-const EMPTY_T_FORM: TeamFormState = { name: '', idea: '' };
+const EMPTY_TEAM_FORM: TeamFormState = {
+  name: '',
+  idea: '',
+};
 
-// ── 토스트 ────────────────────────────────────────────────────
+const EMPTY_TEAM_ASSIGNMENT: TeamAssignmentState = {
+  search: '',
+  selectedParticipantIds: [],
+  checkedCandidateIds: [],
+};
 
-interface ToastState {
-  visible: boolean;
-  message: string;
-}
+const MAX_NEW_ROWS = 50;
 
 function Toast({ toast, onHide }: { toast: ToastState; onHide: () => void }) {
   useEffect(() => {
-    if (toast.visible) {
-      const timer = setTimeout(onHide, 3000);
-      return () => clearTimeout(timer);
-    }
+    if (!toast.visible) return;
+    const timer = setTimeout(onHide, 3000);
+    return () => clearTimeout(timer);
   }, [toast.visible, onHide]);
 
   if (!toast.visible) return null;
 
   return (
     <div
-      className="fixed z-[100] bottom-6 bg-gray-800 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-lg"
+      className="fixed bottom-6 z-[100] rounded-xl bg-gray-800 px-4 py-3 text-sm font-medium text-white shadow-lg"
       style={{ left: 'calc(50% + 120px)', transform: 'translateX(-50%)' }}
     >
       {toast.message}
     </div>
   );
 }
-
-// ── FormField 헬퍼 ────────────────────────────────────────────
 
 function FormField({
   label,
@@ -96,25 +117,95 @@ function FormField({
 }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-600 mb-1.5">
+      <label className="mb-1.5 block text-xs font-medium text-gray-600">
         {label}
-        {required && <span className="text-red-400 ml-0.5">*</span>}
+        {required && <span className="ml-0.5 text-red-400">*</span>}
       </label>
       {children}
-      {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
     </div>
   );
 }
 
-function inputClass(hasError: boolean) {
-  return `w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 transition-colors ${
+function modalInputClass(hasError: boolean) {
+  return `w-full rounded-xl border px-3 py-2.5 text-sm transition-colors focus:outline-none focus:ring-2 ${
     hasError
       ? 'border-red-300 focus:ring-red-200'
       : 'border-gray-200 focus:ring-[#80766b]/30'
   }`;
 }
 
-// ── 메인 컴포넌트 ─────────────────────────────────────────────
+function tableInputClass(hasError: boolean) {
+  return `w-full rounded-lg border bg-white px-2.5 py-2 text-sm transition-colors focus:outline-none focus:ring-2 ${
+    hasError
+      ? 'border-red-300 focus:ring-red-200'
+      : 'border-gray-200 focus:ring-[#80766b]/30'
+  }`;
+}
+
+function createDraftRow(index: number): ParticipantDraftRow {
+  return {
+    key: `new-${index}`,
+    mode: 'new',
+    form: { ...EMPTY_PARTICIPANT_FORM },
+    errors: {},
+    teamLocked: false,
+  };
+}
+
+function validateParticipantDraft(
+  draft: ParticipantDraftRow,
+  teams: Team[]
+): Partial<Record<keyof ParticipantFormState, string>> {
+  const nextErrors: Partial<Record<keyof ParticipantFormState, string>> = {};
+
+  if (!draft.form.name.trim()) nextErrors.name = '이름을 입력해 주세요.';
+  if (!draft.form.email.trim()) nextErrors.email = '이메일을 입력해 주세요.';
+
+  const selectedTeam = teams.find((team) => team.id === draft.form.team);
+  if (selectedTeam?.locked) {
+    nextErrors.team = '잠금된 팀에는 배정할 수 없습니다.';
+  }
+
+  return nextErrors;
+}
+
+function statusLabel(status: ParticipantFormState['status']) {
+  switch (status) {
+    case 'approved':
+      return '승인';
+    case 'rejected':
+      return '거절';
+    default:
+      return '대기';
+  }
+}
+
+function getNextTeamLabel(teams: Team[]) {
+  const nextNumber =
+    teams.reduce((max, team) => {
+      const match = team.name.trim().match(/^(\d+)조$/);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0) + 1;
+
+  return `${nextNumber}조`;
+}
+
+function mergeTeams(baseTeams: Team[], optimisticTeams: Team[]) {
+  const merged = new Map(baseTeams.map((team) => [team.id, team]));
+  for (const team of optimisticTeams) {
+    merged.set(team.id, team);
+  }
+  return Array.from(merged.values());
+}
+
+function mergeParticipants(baseParticipants: Participant[], optimisticParticipants: Participant[]) {
+  const merged = new Map(baseParticipants.map((participant) => [participant.id, participant]));
+  for (const participant of optimisticParticipants) {
+    merged.set(participant.id, participant);
+  }
+  return Array.from(merged.values());
+}
 
 export default function Participants() {
   const participants = useParticipants();
@@ -122,22 +213,19 @@ export default function Participants() {
 
   const [tab, setTab] = useState<Tab>('participants');
   const [search, setSearch] = useState('');
-
-  // ── 참가자 모달 상태 ──────────────────────────────────────
-  const [pModal, setPModal] = useState<
-    { mode: 'add' } | { mode: 'edit'; id: string } | null
-  >(null);
-  const [pForm, setPForm] = useState<ParticipantFormState>(EMPTY_P_FORM);
-  const [pErrors, setPErrors] = useState<Partial<ParticipantFormState>>({});
-
-  // ── 팀 모달 상태 ──────────────────────────────────────────
+  const [newRows, setNewRows] = useState<ParticipantDraftRow[]>([]);
+  const [editRows, setEditRows] = useState<Record<string, ParticipantDraftRow>>({});
+  const [optimisticParticipants, setOptimisticParticipants] = useState<Participant[]>([]);
+  const [optimisticTeams, setOptimisticTeams] = useState<Team[]>([]);
+  const [draftCounter, setDraftCounter] = useState(0);
+  const [savingParticipants, setSavingParticipants] = useState(false);
   const [tModal, setTModal] = useState<
     { mode: 'add' } | { mode: 'edit'; id: string } | null
   >(null);
-  const [tForm, setTForm] = useState<TeamFormState>(EMPTY_T_FORM);
+  const [tForm, setTForm] = useState<TeamFormState>(EMPTY_TEAM_FORM);
   const [tErrors, setTErrors] = useState<Partial<TeamFormState>>({});
-
-  // ── 자동 매칭 상태 ────────────────────────────────────────
+  const [tAssignment, setTAssignment] = useState<TeamAssignmentState>(EMPTY_TEAM_ASSIGNMENT);
+  const [savingTeam, setSavingTeam] = useState(false);
   const [matchOptions, setMatchOptions] = useState<AutoMatchOptions>({
     teamSize: 4,
     spreadDepartment: true,
@@ -146,398 +234,877 @@ export default function Participants() {
   });
   const [toast, setToast] = useState<ToastState>({ visible: false, message: '' });
 
-  // ── 참가자 필터 ──────────────────────────────────────────
-  const filtered = participants.filter((p) => {
-    const q = search.trim().toLowerCase();
-    return (
-      !q ||
-      p.name.includes(q) ||
-      p.email.toLowerCase().includes(q) ||
-      p.department.includes(q)
-    );
-  });
+  const displayTeams = useMemo(() => mergeTeams(teams, optimisticTeams), [teams, optimisticTeams]);
 
+  const displayParticipants = useMemo(
+    () => mergeParticipants(participants, optimisticParticipants),
+    [participants, optimisticParticipants]
+  );
+
+  const filteredParticipants = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return displayParticipants.filter((participant) => {
+      if (!query) return true;
+      return (
+        participant.name.toLowerCase().includes(query) ||
+        participant.email.toLowerCase().includes(query) ||
+        participant.department.toLowerCase().includes(query) ||
+        participant.position.toLowerCase().includes(query)
+      );
+    });
+  }, [displayParticipants, search]);
+
+  const teamAddCandidates = useMemo(
+    () =>
+      displayParticipants.filter(
+        (participant) =>
+          participant.status === 'approved' &&
+          participant.team === '' &&
+          !tAssignment.selectedParticipantIds.includes(participant.id)
+      ),
+    [displayParticipants, tAssignment.selectedParticipantIds]
+  );
+
+  const filteredTeamAddCandidates = useMemo(() => {
+    const query = tAssignment.search.trim().toLowerCase();
+    return teamAddCandidates.filter((participant) => {
+      if (!query) return true;
+      return participant.name.toLowerCase().includes(query);
+    });
+  }, [teamAddCandidates, tAssignment.search]);
+
+  const selectedTeamParticipants = useMemo(
+    () =>
+      tAssignment.selectedParticipantIds
+        .map((id) => displayParticipants.find((participant) => participant.id === id))
+        .filter((participant): participant is Participant => !!participant),
+    [displayParticipants, tAssignment.selectedParticipantIds]
+  );
+
+  const participantRowKeys = useMemo(
+    () => new Set(filteredParticipants.map((participant) => participant.id)),
+    [filteredParticipants]
+  );
+
+  const visibleEditRows = useMemo(
+    () =>
+      Object.values(editRows).filter((draft) => draft.id && participantRowKeys.has(draft.id)),
+    [editRows, participantRowKeys]
+  );
+
+  const openDraftCount = newRows.length + Object.keys(editRows).length;
   const teamName = (teamId: string) =>
-    teams.find((t) => t.id === teamId)?.name ?? (teamId ? '(알 수 없음)' : '-');
+    displayTeams.find((team) => team.id === teamId)?.name ?? (teamId ? '(알 수 없는 팀)' : '-');
 
-  const isInLockedTeam = (p: Participant) => {
-    const team = teams.find((t) => t.id === p.team);
+  const isInLockedTeam = (participant: Participant) => {
+    const team = displayTeams.find((item) => item.id === participant.team);
     return !!team?.locked;
   };
 
-  // ── 참가자 모달 ──────────────────────────────────────────
-  const openPAdd = () => {
-    setPForm(EMPTY_P_FORM);
-    setPErrors({});
-    setPModal({ mode: 'add' });
+  const hideToast = () => setToast((prev) => ({ ...prev, visible: false }));
+
+  const addParticipantRow = () => {
+    if (newRows.length >= MAX_NEW_ROWS) return;
+    const nextIndex = draftCounter + 1;
+    setDraftCounter(nextIndex);
+    setNewRows((prev) => [...prev, createDraftRow(nextIndex)]);
   };
 
-  const openPEdit = (p: Participant) => {
-    setPForm({
-      name: p.name,
-      email: p.email,
-      team: p.team,
-      department: p.department,
-      position: p.position,
-      status: p.status,
-    });
-    setPErrors({});
-    setPModal({ mode: 'edit', id: p.id });
-  };
-
-  const closePModal = () => setPModal(null);
-
-  const validateP = (): boolean => {
-    const next: Partial<ParticipantFormState> = {};
-    if (!pForm.name.trim()) next.name = '이름을 입력하세요';
-    if (!pForm.email.trim()) next.email = '이메일을 입력하세요';
-    setPErrors(next);
-    return Object.keys(next).length === 0;
-  };
-
-  const handlePSubmit = async () => {
-    if (!validateP()) return;
-    try {
-      const data = {
-        name: pForm.name.trim(),
-        email: pForm.email.trim(),
-        team: pForm.team,
-        department: pForm.department.trim(),
-        position: pForm.position.trim(),
-        status: pForm.status,
+  const startEditParticipant = (participant: Participant) => {
+    setEditRows((prev) => {
+      if (prev[participant.id]) return prev;
+      return {
+        ...prev,
+        [participant.id]: {
+          key: participant.id,
+          id: participant.id,
+          mode: 'edit',
+          form: {
+            name: participant.name,
+            email: participant.email,
+            team: participant.team,
+            department: participant.department,
+            position: participant.position,
+            status: participant.status,
+          },
+          errors: {},
+          teamLocked: isInLockedTeam(participant),
+        },
       };
-      if (pModal?.mode === 'add') {
-        await addParticipant(data);
-      } else if (pModal?.mode === 'edit') {
-        await updateParticipant(pModal.id, data);
-      }
-      closePModal();
-    } catch {
-      setToast({ visible: true, message: '저장 중 오류가 발생했습니다' });
-    }
+    });
   };
 
-  const setPField = (key: keyof ParticipantFormState, value: string) => {
-    setPForm((prev) => ({ ...prev, [key]: value }));
-    if (pErrors[key]) setPErrors((prev) => ({ ...prev, [key]: undefined }));
+  const updateDraftField = (
+    key: string,
+    field: keyof ParticipantFormState,
+    value: string
+  ) => {
+    setNewRows((prev) =>
+      prev.map((draft) =>
+        draft.key === key
+          ? {
+              ...draft,
+              form: { ...draft.form, [field]: value },
+              errors: draft.errors[field]
+                ? { ...draft.errors, [field]: undefined }
+                : draft.errors,
+            }
+          : draft
+      )
+    );
+
+    setEditRows((prev) => {
+      const draft = prev[key];
+      if (!draft) return prev;
+      return {
+        ...prev,
+        [key]: {
+          ...draft,
+          form: { ...draft.form, [field]: value },
+          errors: draft.errors[field]
+            ? { ...draft.errors, [field]: undefined }
+            : draft.errors,
+        },
+      };
+    });
+  };
+
+  const setDraftErrors = (
+    key: string,
+    errors: Partial<Record<keyof ParticipantFormState, string>>
+  ) => {
+    setNewRows((prev) =>
+      prev.map((draft) => (draft.key === key ? { ...draft, errors } : draft))
+    );
+    setEditRows((prev) =>
+      prev[key]
+        ? {
+            ...prev,
+            [key]: { ...prev[key], errors },
+          }
+        : prev
+    );
+  };
+
+  const cancelDraft = (key: string) => {
+    setNewRows((prev) => prev.filter((draft) => draft.key !== key));
+    setEditRows((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const handleSaveParticipants = async () => {
+    const drafts = [...newRows, ...Object.values(editRows)];
+    if (drafts.length === 0) return;
+
+    let hasValidationError = false;
+    for (const draft of drafts) {
+      const errors = validateParticipantDraft(draft, teams);
+      setDraftErrors(draft.key, errors);
+      if (Object.keys(errors).length > 0) hasValidationError = true;
+    }
+
+    if (hasValidationError) {
+      setToast({ visible: true, message: '필수 항목과 팀 배정 상태를 확인해 주세요.' });
+      return;
+    }
+
+    setSavingParticipants(true);
+    const failedKeys = new Set<string>();
+
+    for (const draft of drafts) {
+      const payload = {
+        name: draft.form.name.trim(),
+        email: draft.form.email.trim(),
+        team: draft.form.team,
+        department: draft.form.department.trim(),
+        position: draft.form.position.trim(),
+        status: draft.form.status,
+      };
+
+      try {
+        if (draft.mode === 'new') {
+            const createdParticipant = await addParticipant(payload);
+            setOptimisticParticipants((prev) => [...prev, createdParticipant]);
+        } else if (draft.id) {
+          await updateParticipant(draft.id, payload);
+          setOptimisticParticipants((prev) =>
+            prev.map((participant) =>
+              participant.id === draft.id ? { ...participant, ...payload } : participant
+            )
+          );
+        }
+      } catch {
+        failedKeys.add(draft.key);
+      }
+    }
+
+    setSavingParticipants(false);
+
+    if (failedKeys.size === 0) {
+      setNewRows([]);
+      setEditRows({});
+      setToast({ visible: true, message: '참가자 변경사항을 저장했습니다.' });
+      return;
+    }
+
+    setNewRows((prev) => prev.filter((draft) => failedKeys.has(draft.key)));
+    setEditRows((prev) =>
+      Object.fromEntries(Object.entries(prev).filter(([key]) => failedKeys.has(key)))
+    );
+    setToast({
+      visible: true,
+      message: `일부 행 저장에 실패했습니다. 실패한 ${failedKeys.size}개 행을 유지했습니다.`,
+    });
   };
 
   const handleDeleteParticipant = async (id: string) => {
-    const p = participants.find((pp) => pp.id === id);
-    const team = teams.find((t) => t.id === p?.team);
+    const participant = displayParticipants.find((item) => item.id === id);
+    const team = displayTeams.find((item) => item.id === participant?.team);
     if (team?.locked) {
-      setToast({ visible: true, message: '잠긴 팀 소속 참가자는 삭제할 수 없습니다' });
+      setToast({ visible: true, message: '잠금된 팀 소속 참가자는 삭제할 수 없습니다.' });
       return;
     }
+
     try {
       await deleteParticipant(id);
+      cancelDraft(id);
+      setOptimisticParticipants((prev) => prev.filter((participantItem) => participantItem.id !== id));
     } catch {
-      setToast({ visible: true, message: '삭제 중 오류가 발생했습니다' });
+      setToast({ visible: true, message: '참가자 삭제에 실패했습니다.' });
     }
   };
 
-  // 수정 모달에서: 현재 팀이 잠겨있으면 팀 select 비활성화
-  const editingParticipant =
-    pModal?.mode === 'edit'
-      ? participants.find((p) => p.id === pModal.id)
-      : null;
-  const currentTeamLocked = editingParticipant
-    ? (teams.find((t) => t.id === editingParticipant.team)?.locked ?? false)
-    : false;
-
-  // ── 팀 모달 ──────────────────────────────────────────────
   const openTAdd = () => {
-    setTForm(EMPTY_T_FORM);
+    setTForm({ name: getNextTeamLabel(displayTeams), idea: '' });
     setTErrors({});
+    setTAssignment(EMPTY_TEAM_ASSIGNMENT);
     setTModal({ mode: 'add' });
   };
 
   const openTEdit = (teamId: string) => {
-    const t = teams.find((t) => t.id === teamId);
-    if (!t) return;
-    setTForm({ name: t.name, idea: t.idea });
+    const team = displayTeams.find((item) => item.id === teamId);
+    if (!team) return;
+    setTForm({ name: team.name, idea: team.idea });
     setTErrors({});
+    setTAssignment({
+      search: '',
+      selectedParticipantIds: displayParticipants
+        .filter((participant) => participant.team === teamId)
+        .map((participant) => participant.id),
+      checkedCandidateIds: [],
+    });
     setTModal({ mode: 'edit', id: teamId });
   };
 
-  const closeTModal = () => setTModal(null);
+  const closeTModal = () => {
+    setTModal(null);
+    setSavingTeam(false);
+  };
 
-  const validateT = (): boolean => {
+  const toggleCandidateChecked = (participantId: string) => {
+    setTAssignment((prev) => ({
+      ...prev,
+      checkedCandidateIds: prev.checkedCandidateIds.includes(participantId)
+        ? prev.checkedCandidateIds.filter((id) => id !== participantId)
+        : [...prev.checkedCandidateIds, participantId],
+    }));
+  };
+
+  const toggleAllCandidatesChecked = () => {
+    const candidateIds = filteredTeamAddCandidates.map((participant) => participant.id);
+    const isAllChecked =
+      candidateIds.length > 0 &&
+      candidateIds.every((id) => tAssignment.checkedCandidateIds.includes(id));
+
+    setTAssignment((prev) => ({
+      ...prev,
+      checkedCandidateIds: isAllChecked
+        ? prev.checkedCandidateIds.filter((id) => !candidateIds.includes(id))
+        : [...new Set([...prev.checkedCandidateIds, ...candidateIds])],
+    }));
+  };
+
+  const moveCheckedCandidatesToSelected = () => {
+    setTAssignment((prev) => ({
+      ...prev,
+      selectedParticipantIds: [...new Set([...prev.selectedParticipantIds, ...prev.checkedCandidateIds])],
+      checkedCandidateIds: [],
+    }));
+  };
+
+  const removeSelectedParticipant = (participantId: string) => {
+    setTAssignment((prev) => ({
+      ...prev,
+      selectedParticipantIds: prev.selectedParticipantIds.filter((id) => id !== participantId),
+      checkedCandidateIds: prev.checkedCandidateIds.filter((id) => id !== participantId),
+    }));
+  };
+
+  const validateTeam = () => {
     const next: Partial<TeamFormState> = {};
-    if (!tForm.name.trim()) next.name = '팀 이름을 입력하세요';
+    if (!tForm.name.trim()) next.name = '팀 이름을 입력해 주세요.';
     setTErrors(next);
     return Object.keys(next).length === 0;
   };
 
-  const handleTSubmit = async () => {
-    if (!validateT()) return;
-    const t = tModal?.mode === 'edit' ? teams.find((t) => t.id === (tModal as { mode: 'edit'; id: string }).id) : null;
-    if (t?.locked) {
-      setToast({ visible: true, message: '잠긴 팀은 수정할 수 없습니다' });
+  const handleTeamSubmit = async () => {
+    if (!validateTeam()) return;
+
+    const editingTeam =
+      tModal?.mode === 'edit' ? displayTeams.find((team) => team.id === tModal.id) : null;
+    if (editingTeam?.locked) {
+      setToast({ visible: true, message: '잠금된 팀은 수정할 수 없습니다.' });
       closeTModal();
       return;
     }
+
+    setSavingTeam(true);
+
     try {
       if (tModal?.mode === 'add') {
-        await addTeam({ name: tForm.name.trim(), idea: tForm.idea.trim() });
+        const createdTeam = await addTeam({ name: tForm.name.trim(), idea: tForm.idea.trim() });
+        const assignmentResults = await Promise.allSettled(
+          tAssignment.selectedParticipantIds.map((participantId) =>
+            updateParticipant(participantId, { team: createdTeam.id })
+          )
+        );
+        const failedAssignments = assignmentResults.filter(
+          (result) => result.status === 'rejected'
+        ).length;
+
+        if (failedAssignments > 0) {
+          setToast({
+            visible: true,
+            message: `팀은 생성되었지만 참가자 ${failedAssignments}명 배정에 실패했습니다.`,
+          });
+        } else {
+          setToast({
+            visible: true,
+            message: `팀과 참가자 ${tAssignment.selectedParticipantIds.length}명 배정을 완료했습니다.`,
+          });
+        }
+        setOptimisticTeams((prev) => [
+          ...prev.filter((team) => team.id !== createdTeam.id),
+          {
+            id: createdTeam.id,
+            name: createdTeam.name,
+            idea: createdTeam.idea ?? '',
+            submitStatus: createdTeam.submit_status ?? 'not-submitted',
+            score: null,
+            locked: createdTeam.locked ?? false,
+            members: [...tAssignment.selectedParticipantIds],
+          },
+        ]);
+        setOptimisticParticipants((prev) =>
+          prev.map((participant) =>
+            tAssignment.selectedParticipantIds.includes(participant.id)
+              ? { ...participant, team: createdTeam.id }
+              : participant
+          )
+        );
       } else if (tModal?.mode === 'edit') {
-        await updateTeam(tModal.id, { name: tForm.name.trim(), idea: tForm.idea.trim() });
+        const previousMemberIds = displayParticipants
+          .filter((participant) => participant.team === tModal.id)
+          .map((participant) => participant.id);
+        const nextMemberIds = tAssignment.selectedParticipantIds;
+        const toAssign = nextMemberIds.filter((id) => !previousMemberIds.includes(id));
+        const toRemove = previousMemberIds.filter((id) => !nextMemberIds.includes(id));
+
+        await updateTeam(tModal.id, {
+          name: tForm.name.trim(),
+          idea: tForm.idea.trim(),
+        });
+        const assignmentResults = await Promise.allSettled([
+          ...toAssign.map((participantId) => updateParticipant(participantId, { team: tModal.id })),
+          ...toRemove.map((participantId) => updateParticipant(participantId, { team: '' })),
+        ]);
+        const failedAssignments = assignmentResults.filter(
+          (result) => result.status === 'rejected'
+        ).length;
+
+        setOptimisticTeams((prev) => [
+          ...prev.filter((team) => team.id !== tModal.id),
+          {
+            id: tModal.id,
+            name: tForm.name.trim(),
+            idea: tForm.idea.trim(),
+            submitStatus: editingTeam?.submitStatus ?? 'not-submitted',
+            score: editingTeam?.score ?? null,
+            locked: editingTeam?.locked ?? false,
+            members: [...nextMemberIds],
+          },
+        ]);
+        setOptimisticParticipants((prev) =>
+          prev.map((participant) => {
+            if (toAssign.includes(participant.id)) return { ...participant, team: tModal.id };
+            if (toRemove.includes(participant.id)) return { ...participant, team: '' };
+            return participant;
+          })
+        );
+
+        setToast({
+          visible: true,
+          message:
+            failedAssignments > 0
+              ? `팀 정보는 저장되었지만 참가자 ${failedAssignments}명 반영에 실패했습니다.`
+              : '팀 정보를 저장했습니다.',
+        });
       }
       closeTModal();
     } catch {
-      setToast({ visible: true, message: '저장 중 오류가 발생했습니다' });
+      setSavingTeam(false);
+      setToast({ visible: true, message: '팀 저장에 실패했습니다.' });
     }
   };
 
   const handleDeleteTeam = async (id: string) => {
-    const team = teams.find((t) => t.id === id);
+    const team = teams.find((item) => item.id === id);
     if (team?.locked) {
-      setToast({ visible: true, message: '잠긴 팀은 삭제할 수 없습니다' });
+      setToast({ visible: true, message: '잠금된 팀은 삭제할 수 없습니다.' });
       return;
     }
+
     try {
       await deleteTeam(id);
     } catch {
-      setToast({ visible: true, message: '팀 삭제 중 오류가 발생했습니다' });
+      setToast({ visible: true, message: '팀 삭제에 실패했습니다.' });
     }
   };
 
-  // ── 자동 매칭 ────────────────────────────────────────────
   const handleAutoMatch = async () => {
     try {
       const result = await autoMatch(matchOptions);
       setToast({
         visible: true,
-        message: `${result.matched}명 매칭 완료, ${result.unmatched}명 미배정`,
+        message: `${result.matched}명 자동 배정 완료, ${result.unmatched}명 미배정`,
       });
     } catch {
-      setToast({ visible: true, message: '자동 매칭 중 오류가 발생했습니다' });
+      setToast({ visible: true, message: '자동 매칭 실행에 실패했습니다.' });
     }
   };
-
-  const hideToast = () => setToast((prev) => ({ ...prev, visible: false }));
-
-  const isPFormValid = pForm.name.trim() && pForm.email.trim();
 
   return (
     <AdminLayout>
       <Toast toast={toast} onHide={hideToast} />
 
-      {/* ── 탭 ── */}
-      <div className="flex border-b border-gray-200 mb-5">
-        {(['participants', 'teams'] as Tab[]).map((t) => (
+      <div className="mb-5 flex border-b border-gray-200">
+        {(['participants', 'teams'] as Tab[]).map((item) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              tab === t
+            key={item}
+            onClick={() => setTab(item)}
+            className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+              tab === item
                 ? 'border-[#fcaf17] text-[#80766b]'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            {t === 'participants'
-              ? `참가자 목록 (${participants.length})`
-              : `팀 목록 (${teams.length})`}
+            {item === 'participants'
+              ? `참가자 (${displayParticipants.length})`
+              : `팀 (${displayTeams.length})`}
           </button>
         ))}
       </div>
 
       {tab === 'participants' ? (
         <ParticipantsTab
-          filtered={filtered}
+          filteredParticipants={filteredParticipants}
           search={search}
           setSearch={setSearch}
+          teams={displayTeams}
           teamName={teamName}
           isInLockedTeam={isInLockedTeam}
-          onAdd={openPAdd}
-          onEdit={openPEdit}
+          newRows={newRows}
+          visibleEditRows={visibleEditRows}
+          onAddRow={addParticipantRow}
+          onStartEdit={startEditParticipant}
           onDelete={handleDeleteParticipant}
+          onDraftChange={updateDraftField}
+          onCancelDraft={cancelDraft}
+          onSaveAll={handleSaveParticipants}
+          savingParticipants={savingParticipants}
+          openDraftCount={openDraftCount}
         />
       ) : (
         <TeamsTab
-          teams={teams}
-          participants={participants}
+          teams={displayTeams}
+          participants={displayParticipants}
           matchOptions={matchOptions}
           setMatchOptions={setMatchOptions}
           onAutoMatch={handleAutoMatch}
           onAddTeam={openTAdd}
           onEditTeam={openTEdit}
           onDeleteTeam={handleDeleteTeam}
-          onToggleLock={(id) => toggleTeamLock(id, teams.find((t) => t.id === id)?.locked ?? false)}
+          onToggleLock={(id) =>
+            toggleTeamLock(id, displayTeams.find((team) => team.id === id)?.locked ?? false)
+          }
         />
       )}
 
-      {/* ── 참가자 추가/수정 모달 ── */}
-      {pModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={closePModal} />
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-base font-semibold text-gray-800">
-                {pModal.mode === 'add' ? '참가자 추가' : '참가자 정보 수정'}
-              </h3>
-              <button
-                onClick={closePModal}
-                className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <FormField label="이름" required error={pErrors.name}>
-                <input
-                  type="text"
-                  placeholder="홍길동"
-                  value={pForm.name}
-                  onChange={(e) => setPField('name', e.target.value)}
-                  className={inputClass(!!pErrors.name)}
-                />
-              </FormField>
-
-              <FormField label="이메일" required error={pErrors.email}>
-                <input
-                  type="email"
-                  placeholder="example@company.com"
-                  value={pForm.email}
-                  onChange={(e) => setPField('email', e.target.value)}
-                  className={inputClass(!!pErrors.email)}
-                />
-              </FormField>
-
-              <FormField label="팀">
-                <select
-                  value={pForm.team}
-                  onChange={(e) => setPField('team', e.target.value)}
-                  disabled={currentTeamLocked}
-                  className={`${inputClass(false)} disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  <option value="">팀 선택 (선택사항)</option>
-                  {teams.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                      {t.locked ? ' (잠김)' : ''}
-                    </option>
-                  ))}
-                </select>
-                {currentTeamLocked && (
-                  <p className="text-xs text-amber-500 mt-1">
-                    잠긴 팀 소속 참가자의 팀은 변경할 수 없습니다
-                  </p>
-                )}
-              </FormField>
-
-              <div className="grid grid-cols-2 gap-3">
-                <FormField label="부서">
-                  <input
-                    type="text"
-                    placeholder="개발팀"
-                    value={pForm.department}
-                    onChange={(e) => setPField('department', e.target.value)}
-                    className={inputClass(false)}
-                  />
-                </FormField>
-                <FormField label="직급">
-                  <input
-                    type="text"
-                    placeholder="대리"
-                    value={pForm.position}
-                    onChange={(e) => setPField('position', e.target.value)}
-                    className={inputClass(false)}
-                  />
-                </FormField>
-              </div>
-
-              <FormField label="상태">
-                <select
-                  value={pForm.status}
-                  onChange={(e) =>
-                    setPField('status', e.target.value as ParticipantFormState['status'])
-                  }
-                  className={inputClass(false)}
-                >
-                  <option value="pending">대기</option>
-                  <option value="approved">승인</option>
-                  <option value="rejected">거절</option>
-                </select>
-              </FormField>
-            </div>
-
-            <div className="flex gap-2 mt-6">
-              <button
-                onClick={closePModal}
-                className="flex-1 py-2.5 text-sm text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
-              >
-                취소
-              </button>
-              <button
-                onClick={handlePSubmit}
-                disabled={!isPFormValid}
-                className="flex-1 py-2.5 text-sm text-white bg-[#80766b] rounded-xl hover:bg-[#6e645a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
-              >
-                {pModal.mode === 'add' ? '추가' : '저장'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── 팀 추가/수정 모달 ── */}
       {tModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={closeTModal} />
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-base font-semibold text-gray-800">
-                {tModal.mode === 'add' ? '팀 추가' : '팀 정보 수정'}
-              </h3>
+          <div className="relative flex h-[calc(100dvh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white p-4 shadow-xl sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:p-6">
+            <div className="mb-4 flex items-center justify-between border-b border-gray-100 pb-4">
+              <div>
+                <h3 className="text-base font-semibold text-gray-800">
+                  {tModal.mode === 'add' ? '팀 추가' : '팀 수정'}
+                </h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  {tModal.mode === 'add'
+                    ? '승인되었고 팀이 없는 참가자를 선택해 새 팀을 구성합니다.'
+                    : '팀 정보와 팀원 구성을 같은 화면에서 수정합니다.'}
+                </p>
+              </div>
               <button
                 onClick={closeTModal}
-                className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                className="rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
               >
-                <X className="w-5 h-5" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="space-y-4">
-              <FormField label="팀 이름" required error={tErrors.name}>
-                <input
-                  type="text"
-                  placeholder="5조"
-                  value={tForm.name}
-                  onChange={(e) => {
-                    setTForm((prev) => ({ ...prev, name: e.target.value }));
-                    if (tErrors.name) setTErrors((prev) => ({ ...prev, name: undefined }));
-                  }}
-                  className={inputClass(!!tErrors.name)}
-                />
-              </FormField>
+            <div className="hidden min-h-0 flex-1 overflow-hidden lg:grid lg:grid-cols-[1.1fr_0.9fr] lg:gap-5">
+              <div className="min-h-0 rounded-2xl border border-gray-200 p-4">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="relative w-full max-w-sm">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="참가자명 검색"
+                      value={tAssignment.search}
+                      onChange={(event) =>
+                        setTAssignment((prev) => ({ ...prev, search: event.target.value }))
+                      }
+                      className="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#80766b]/30"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-2 text-sm text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={
+                          filteredTeamAddCandidates.length > 0 &&
+                          filteredTeamAddCandidates.every((participant) =>
+                            tAssignment.checkedCandidateIds.includes(participant.id)
+                          )
+                        }
+                        onChange={toggleAllCandidatesChecked}
+                        className="h-4 w-4 accent-[#80766b]"
+                      />
+                      전체 선택
+                    </label>
+                    <button
+                      onClick={moveCheckedCandidatesToSelected}
+                      disabled={tAssignment.checkedCandidateIds.length === 0}
+                      className="rounded-lg bg-[#80766b] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#6e645a] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      선택 추가
+                    </button>
+                  </div>
+                </div>
 
-              <FormField label="아이디어">
-                <textarea
-                  placeholder="팀 아이디어를 입력하세요"
-                  value={tForm.idea}
-                  onChange={(e) => setTForm((prev) => ({ ...prev, idea: e.target.value }))}
-                  rows={3}
-                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#80766b]/30 transition-colors resize-none"
-                />
-              </FormField>
+                <div className="h-[420px] overflow-y-auto rounded-xl border border-gray-100">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-gray-50">
+                      <tr className="border-b border-gray-100 text-left text-xs font-medium text-gray-400">
+                        <th className="w-12 px-4 py-3">
+                          <span className="sr-only">선택</span>
+                        </th>
+                        <th className="px-4 py-3">이름</th>
+                        <th className="px-4 py-3">부서</th>
+                        <th className="px-4 py-3">직급</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {filteredTeamAddCandidates.map((participant) => (
+                        <tr key={participant.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              checked={tAssignment.checkedCandidateIds.includes(participant.id)}
+                              onChange={() => toggleCandidateChecked(participant.id)}
+                              className="h-4 w-4 accent-[#80766b]"
+                            />
+                          </td>
+                          <td className="px-4 py-3 font-medium text-gray-800">{participant.name}</td>
+                          <td className="px-4 py-3 text-gray-500">{participant.department || '-'}</td>
+                          <td className="px-4 py-3 text-gray-500">{participant.position || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {filteredTeamAddCandidates.length === 0 && (
+                    <p className="py-10 text-center text-sm text-gray-400">
+                      선택 가능한 참가자가 없습니다.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex h-full min-h-0 flex-col rounded-2xl border border-gray-200 p-4">
+                <div className="mb-4 rounded-2xl bg-[#80766b]/8 px-4 py-3">
+                  <p className="text-xs font-medium text-gray-500">
+                    {tModal.mode === 'add' ? '자동 생성 팀 번호' : '현재 팀'}
+                  </p>
+                  <p className="mt-1 text-2xl font-bold text-[#80766b]">
+                    {tModal.mode === 'add' ? getNextTeamLabel(displayTeams) : tForm.name}
+                  </p>
+                </div>
+
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <div className="space-y-4">
+                    <FormField label="팀 이름" required error={tErrors.name}>
+                      <input
+                        type="text"
+                        placeholder="예: 5조"
+                        value={tForm.name}
+                        onChange={(event) => {
+                          setTForm((prev) => ({ ...prev, name: event.target.value }));
+                          if (tErrors.name) {
+                            setTErrors((prev) => ({ ...prev, name: undefined }));
+                          }
+                        }}
+                        className={modalInputClass(!!tErrors.name)}
+                      />
+                    </FormField>
+
+                    <FormField label="팀 설명">
+                      <textarea
+                        placeholder="팀 설명을 입력해 주세요."
+                        value={tForm.idea}
+                        onChange={(event) =>
+                          setTForm((prev) => ({ ...prev, idea: event.target.value }))
+                        }
+                        rows={4}
+                        className="w-full resize-none rounded-xl border border-gray-200 px-3 py-2.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[#80766b]/30"
+                      />
+                    </FormField>
+                  </div>
+
+                  <div className="mt-4 flex min-h-0 flex-1 flex-col">
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-sm font-medium text-gray-700">선택된 참가자</p>
+                      <span className="text-xs text-gray-400">총 {selectedTeamParticipants.length}명</span>
+                    </div>
+
+                    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto rounded-xl border border-gray-100 bg-gray-50 p-3">
+                      {selectedTeamParticipants.length === 0 ? (
+                        <p className="py-8 text-center text-sm text-gray-400">
+                          좌측에서 참가자를 선택해 추가해 주세요.
+                        </p>
+                      ) : (
+                        selectedTeamParticipants.map((participant) => (
+                          <div
+                            key={participant.id}
+                            className="flex items-center justify-between rounded-xl bg-white px-3 py-2"
+                          >
+                            <div>
+                              <p className="text-sm font-medium text-gray-800">{participant.name}</p>
+                              <p className="text-xs text-gray-400">
+                                {participant.department || '-'} / {participant.position || '-'}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => removeSelectedParticipant(participant.id)}
+                              className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                              title="제거"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex gap-2 pt-2">
+                  <button
+                    onClick={closeTModal}
+                    className="flex-1 rounded-xl bg-gray-100 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-200"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={handleTeamSubmit}
+                    disabled={!tForm.name.trim() || savingTeam}
+                    className="flex-1 rounded-xl bg-[#80766b] py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#6e645a] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {savingTeam ? '저장 중...' : tModal.mode === 'add' ? '팀 생성' : '팀 저장'}
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <div className="flex gap-2 mt-6">
-              <button
-                onClick={closeTModal}
-                className="flex-1 py-2.5 text-sm text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleTSubmit}
-                disabled={!tForm.name.trim()}
-                className="flex-1 py-2.5 text-sm text-white bg-[#80766b] rounded-xl hover:bg-[#6e645a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
-              >
-                {tModal.mode === 'add' ? '추가' : '저장'}
-              </button>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
+              <div className="mb-3 rounded-2xl bg-[#80766b]/8 px-4 py-3">
+                <p className="text-xs font-medium text-gray-500">
+                  {tModal.mode === 'add' ? '자동 생성 팀 번호' : '현재 팀'}
+                </p>
+                <p className="mt-1 text-2xl font-bold text-[#80766b]">
+                  {tModal.mode === 'add' ? getNextTeamLabel(displayTeams) : tForm.name}
+                </p>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-gray-200 p-4">
+                    <div className="space-y-4">
+                      <FormField label="팀 이름" required error={tErrors.name}>
+                        <input
+                          type="text"
+                          placeholder="예: 5조"
+                          value={tForm.name}
+                          onChange={(event) => {
+                            setTForm((prev) => ({ ...prev, name: event.target.value }));
+                            if (tErrors.name) {
+                              setTErrors((prev) => ({ ...prev, name: undefined }));
+                            }
+                          }}
+                          className={modalInputClass(!!tErrors.name)}
+                        />
+                      </FormField>
+
+                      <FormField label="팀 설명">
+                        <textarea
+                          placeholder="팀 설명을 입력해 주세요."
+                          value={tForm.idea}
+                          onChange={(event) =>
+                            setTForm((prev) => ({ ...prev, idea: event.target.value }))
+                          }
+                          rows={3}
+                          className="w-full resize-none rounded-xl border border-gray-200 px-3 py-2.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[#80766b]/30"
+                        />
+                      </FormField>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-gray-200 p-4">
+                    <div className="mb-3 space-y-3">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="참가자명 검색"
+                          value={tAssignment.search}
+                          onChange={(event) =>
+                            setTAssignment((prev) => ({ ...prev, search: event.target.value }))
+                          }
+                          className="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#80766b]/30"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3">
+                        <label className="flex items-center gap-2 text-sm text-gray-600">
+                          <input
+                            type="checkbox"
+                            checked={
+                              filteredTeamAddCandidates.length > 0 &&
+                              filteredTeamAddCandidates.every((participant) =>
+                                tAssignment.checkedCandidateIds.includes(participant.id)
+                              )
+                            }
+                            onChange={toggleAllCandidatesChecked}
+                            className="h-4 w-4 accent-[#80766b]"
+                          />
+                          전체 선택
+                        </label>
+                        <button
+                          onClick={moveCheckedCandidatesToSelected}
+                          disabled={tAssignment.checkedCandidateIds.length === 0}
+                          className="rounded-lg bg-[#80766b] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#6e645a] disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          선택 추가
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {filteredTeamAddCandidates.length === 0 ? (
+                        <p className="py-8 text-center text-sm text-gray-400">
+                          선택 가능한 참가자가 없습니다.
+                        </p>
+                      ) : (
+                        filteredTeamAddCandidates.map((participant) => (
+                          <label
+                            key={participant.id}
+                            className="flex items-start gap-3 rounded-xl border border-gray-100 px-3 py-3"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={tAssignment.checkedCandidateIds.includes(participant.id)}
+                              onChange={() => toggleCandidateChecked(participant.id)}
+                              className="mt-0.5 h-4 w-4 shrink-0 accent-[#80766b]"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-800">{participant.name}</p>
+                              <p className="mt-1 text-xs text-gray-400">
+                                {participant.department || '-'} / {participant.position || '-'}
+                              </p>
+                            </div>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-gray-200 p-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-sm font-medium text-gray-700">선택된 참가자</p>
+                      <span className="text-xs text-gray-400">총 {selectedTeamParticipants.length}명</span>
+                    </div>
+
+                    <div className="max-h-[240px] space-y-2 overflow-y-auto rounded-xl bg-gray-50 p-2">
+                      {selectedTeamParticipants.length === 0 ? (
+                        <p className="py-8 text-center text-sm text-gray-400">
+                          좌측 목록에서 참가자를 선택해 추가해 주세요.
+                        </p>
+                      ) : (
+                        selectedTeamParticipants.map((participant) => (
+                          <div
+                            key={participant.id}
+                            className="flex items-center justify-between rounded-xl bg-white px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-800">{participant.name}</p>
+                              <p className="mt-1 text-xs text-gray-400">
+                                {participant.department || '-'} / {participant.position || '-'}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => removeSelectedParticipant(participant.id)}
+                              className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                              title="제거"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 flex gap-2 border-t border-gray-100 pt-4">
+                <button
+                  onClick={closeTModal}
+                  className="flex-1 rounded-xl bg-gray-100 py-3 text-sm text-gray-600 transition-colors hover:bg-gray-200"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleTeamSubmit}
+                  disabled={!tForm.name.trim() || savingTeam}
+                  className="flex-1 rounded-xl bg-[#80766b] py-3 text-sm font-medium text-white transition-colors hover:bg-[#6e645a] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {savingTeam ? '저장 중...' : tModal.mode === 'add' ? '팀 생성' : '팀 저장'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -546,169 +1113,297 @@ export default function Participants() {
   );
 }
 
-// ── 참가자 탭 ─────────────────────────────────────────────────
-
-import type { Team } from '../../data/hackathonStore';
-
 function ParticipantsTab({
-  filtered,
+  filteredParticipants,
   search,
   setSearch,
+  teams,
   teamName,
   isInLockedTeam,
-  onAdd,
-  onEdit,
+  newRows,
+  visibleEditRows,
+  onAddRow,
+  onStartEdit,
   onDelete,
+  onDraftChange,
+  onCancelDraft,
+  onSaveAll,
+  savingParticipants,
+  openDraftCount,
 }: {
-  filtered: Participant[];
+  filteredParticipants: Participant[];
   search: string;
-  setSearch: (v: string) => void;
+  setSearch: (value: string) => void;
+  teams: Team[];
   teamName: (id: string) => string;
-  isInLockedTeam: (p: Participant) => boolean;
-  onAdd: () => void;
-  onEdit: (p: Participant) => void;
+  isInLockedTeam: (participant: Participant) => boolean;
+  newRows: ParticipantDraftRow[];
+  visibleEditRows: ParticipantDraftRow[];
+  onAddRow: () => void;
+  onStartEdit: (participant: Participant) => void;
   onDelete: (id: string) => void;
+  onDraftChange: (
+    key: string,
+    field: keyof ParticipantFormState,
+    value: string
+  ) => void;
+  onCancelDraft: (key: string) => void;
+  onSaveAll: () => void;
+  savingParticipants: boolean;
+  openDraftCount: number;
 }) {
+  const editRowMap = useMemo(
+    () => Object.fromEntries(visibleEditRows.map((draft) => [draft.id, draft])),
+    [visibleEditRows]
+  );
+
+  const hasDrafts = openDraftCount > 0;
+  const addDisabled = newRows.length >= MAX_NEW_ROWS;
+  const rowsEmpty = filteredParticipants.length === 0 && newRows.length === 0;
+
   return (
     <>
-      <div className="flex gap-3 mb-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="이름, 이메일, 부서 검색"
+            placeholder="이름, 이메일, 부서, 직급으로 검색"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#80766b]/30"
+            onChange={(event) => setSearch(event.target.value)}
+            className="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#80766b]/30"
           />
         </div>
-        <button
-          onClick={onAdd}
-          className="flex items-center gap-1.5 px-3 py-2 bg-[#80766b] text-white text-sm font-medium rounded-lg hover:bg-[#6e645a] transition-colors shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">참가자 추가</span>
-        </button>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={onSaveAll}
+            disabled={!hasDrafts || savingParticipants}
+            className="rounded-lg bg-[#fcaf17] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#e09c10] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {savingParticipants ? '저장 중...' : `일괄 저장${hasDrafts ? ` (${openDraftCount})` : ''}`}
+          </button>
+          <button
+            onClick={onAddRow}
+            disabled={addDisabled}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#80766b] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#6e645a] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Plus className="h-4 w-4" />
+            참가자 추가
+          </button>
+        </div>
       </div>
 
-      {/* 데스크탑 테이블 */}
-      <div className="hidden sm:block">
-        <Card>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 text-left text-xs text-gray-400 font-medium uppercase tracking-wide">
-                  <th className="pb-3 pr-4">이름</th>
-                  <th className="pb-3 pr-4">이메일</th>
-                  <th className="pb-3 pr-4">팀</th>
-                  <th className="pb-3 pr-4">부서</th>
-                  <th className="pb-3 pr-4">직급</th>
-                  <th className="pb-3 pr-4 w-20" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {filtered.map((p) => {
-                  const locked = isInLockedTeam(p);
+      <Card>
+        <div className="mb-3 flex items-center justify-between gap-3 text-xs text-gray-500">
+          <p>모바일과 PC 모두 동일한 인라인 그리드를 사용하며, 좁은 화면에서는 좌우 스크롤로 확인할 수 있습니다.</p>
+          <p className="shrink-0">신규 행 {newRows.length}/{MAX_NEW_ROWS}</p>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-[1120px] table-fixed text-sm">
+            <colgroup>
+              <col style={{ width: 160 }} />
+              <col style={{ width: 300 }} />
+              <col style={{ width: 180 }} />
+              <col style={{ width: 160 }} />
+              <col style={{ width: 140 }} />
+              <col style={{ width: 140 }} />
+              <col style={{ width: 160 }} />
+            </colgroup>
+            <thead>
+              <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase tracking-wide text-gray-400">
+                <th className="pb-3 pr-3">이름</th>
+                <th className="pb-3 pr-3">이메일</th>
+                <th className="pb-3 pr-3">팀</th>
+                <th className="pb-3 pr-3">부서</th>
+                <th className="pb-3 pr-3">직급</th>
+                <th className="pb-3 pr-3">상태</th>
+                <th className="pb-3">동작</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {newRows.map((draft) => (
+                <ParticipantEditableRow
+                  key={draft.key}
+                  draft={draft}
+                  teams={teams}
+                  onDraftChange={onDraftChange}
+                  onCancel={onCancelDraft}
+                />
+              ))}
+
+              {filteredParticipants.map((participant) => {
+                const draft = editRowMap[participant.id];
+                if (draft) {
                   return (
-                    <tr key={p.id} className="hover:bg-gray-50 transition-colors group">
-                      <td className="py-3 pr-4 font-medium text-gray-800">{p.name}</td>
-                      <td className="py-3 pr-4 text-gray-500">{p.email}</td>
-                      <td className="py-3 pr-4 text-gray-500">
-                        <span className="flex items-center gap-1">
-                          {teamName(p.team)}
-                          {locked && <Lock className="w-3 h-3 text-amber-500" />}
-                        </span>
-                      </td>
-                      <td className="py-3 pr-4 text-gray-500">{p.department}</td>
-                      <td className="py-3 pr-4 text-gray-500">{p.position}</td>
-                      <td className="py-3">
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                          <button
-                            onClick={() => onEdit(p)}
-                            className="p-1.5 text-gray-300 hover:text-[#80766b] hover:bg-[#80766b]/10 rounded-lg transition-colors"
-                            title="수정"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <div className="relative group/del">
-                            <button
-                              onClick={() => onDelete(p.id)}
-                              disabled={locked}
-                              className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                              title={locked ? '잠긴 팀 소속 참가자는 삭제할 수 없습니다' : '삭제'}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                            {locked && (
-                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover/del:block w-max max-w-xs bg-gray-800 text-white text-xs rounded-lg px-2.5 py-1.5 pointer-events-none z-10">
-                                잠긴 팀 소속 참가자는 삭제할 수 없습니다
-                                <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
+                    <ParticipantEditableRow
+                      key={draft.key}
+                      draft={draft}
+                      teams={teams}
+                      onDraftChange={onDraftChange}
+                      onCancel={onCancelDraft}
+                    />
                   );
-                })}
-              </tbody>
-            </table>
-            {filtered.length === 0 && (
-              <p className="text-center text-sm text-gray-400 py-10">검색 결과가 없습니다.</p>
-            )}
-          </div>
-        </Card>
-      </div>
+                }
 
-      {/* 모바일 카드 */}
-      <div className="sm:hidden space-y-3">
-        {filtered.map((p) => {
-          const locked = isInLockedTeam(p);
-          return (
-            <Card key={p.id}>
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-medium text-gray-800">{p.name}</p>
-                  <p className="text-xs text-gray-400 mt-0.5 truncate">{p.email}</p>
-                  <div className="flex items-center gap-1 mt-1">
-                    <p className="text-xs text-gray-500">{teamName(p.team)}</p>
-                    {locked && <Lock className="w-3 h-3 text-amber-500" />}
-                  </div>
-                </div>
-                <div className="flex items-start gap-2 shrink-0">
-                  <div className="text-right">
-                    <p className="text-xs font-medium text-gray-700">{p.department}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{p.position}</p>
-                  </div>
-                  <button
-                    onClick={() => onEdit(p)}
-                    className="p-1.5 text-gray-400 hover:text-[#80766b] hover:bg-[#80766b]/10 rounded-lg transition-colors"
-                    title="수정"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => onDelete(p.id)}
-                    disabled={locked}
-                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    title={locked ? '잠긴 팀 소속 참가자는 삭제할 수 없습니다' : '삭제'}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </Card>
-          );
-        })}
-        {filtered.length === 0 && (
-          <p className="text-center text-sm text-gray-400 py-10">검색 결과가 없습니다.</p>
+                const locked = isInLockedTeam(participant);
+                return (
+                  <tr key={participant.id} className="transition-colors hover:bg-gray-50">
+                    <td className="py-3 pr-3 font-medium text-gray-800">{participant.name}</td>
+                    <td className="truncate py-3 pr-3 text-gray-500">{participant.email}</td>
+                    <td className="py-3 pr-3 text-gray-500">
+                      <span className="flex items-center gap-1">
+                        {teamName(participant.team)}
+                        {locked && <Lock className="h-3 w-3 text-amber-500" />}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-3 text-gray-500">{participant.department || '-'}</td>
+                    <td className="py-3 pr-3 text-gray-500">{participant.position || '-'}</td>
+                    <td className="py-3 pr-3 text-gray-500">{statusLabel(participant.status)}</td>
+                    <td className="py-3">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => onStartEdit(participant)}
+                          className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-[#80766b]/10 hover:text-[#80766b]"
+                          title="수정"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => onDelete(participant.id)}
+                          disabled={locked}
+                          className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-30"
+                          title={locked ? '잠금된 팀 소속 참가자는 삭제할 수 없습니다.' : '삭제'}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {rowsEmpty && (
+          <p className="py-10 text-center text-sm text-gray-400">검색 결과가 없습니다.</p>
         )}
-      </div>
+      </Card>
     </>
   );
 }
 
-// ── 팀 탭 ─────────────────────────────────────────────────────
+function ParticipantEditableRow({
+  draft,
+  teams,
+  onDraftChange,
+  onCancel,
+}: {
+  draft: ParticipantDraftRow;
+  teams: Team[];
+  onDraftChange: (
+    key: string,
+    field: keyof ParticipantFormState,
+    value: string
+  ) => void;
+  onCancel: (key: string) => void;
+}) {
+  return (
+    <tr className="bg-[#fffaf0] align-top">
+      <td className="py-3 pr-3">
+        <input
+          type="text"
+          value={draft.form.name}
+          onChange={(event) => onDraftChange(draft.key, 'name', event.target.value)}
+          className={tableInputClass(!!draft.errors.name)}
+          placeholder="이름"
+        />
+        {draft.errors.name && <p className="mt-1 text-xs text-red-500">{draft.errors.name}</p>}
+      </td>
+      <td className="py-3 pr-3">
+        <input
+          type="email"
+          value={draft.form.email}
+          onChange={(event) => onDraftChange(draft.key, 'email', event.target.value)}
+          className={tableInputClass(!!draft.errors.email)}
+          placeholder="example@company.com"
+        />
+        {draft.errors.email && (
+          <p className="mt-1 text-xs text-red-500">{draft.errors.email}</p>
+        )}
+      </td>
+      <td className="py-3 pr-3">
+        <select
+          value={draft.form.team}
+          onChange={(event) => onDraftChange(draft.key, 'team', event.target.value)}
+          disabled={draft.teamLocked}
+          className={`${tableInputClass(!!draft.errors.team)} disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400`}
+        >
+          <option value="">팀 없음</option>
+          {teams.map((team) => (
+            <option key={team.id} value={team.id} disabled={team.locked}>
+              {team.name}
+              {team.locked ? ' (잠금)' : ''}
+            </option>
+          ))}
+        </select>
+        {draft.errors.team && <p className="mt-1 text-xs text-red-500">{draft.errors.team}</p>}
+        {draft.teamLocked && (
+          <p className="mt-1 text-xs text-amber-600">
+            잠금된 팀 소속 참가자는 팀을 변경할 수 없습니다.
+          </p>
+        )}
+      </td>
+      <td className="py-3 pr-3">
+        <input
+          type="text"
+          value={draft.form.department}
+          onChange={(event) => onDraftChange(draft.key, 'department', event.target.value)}
+          className={tableInputClass(false)}
+          placeholder="부서"
+        />
+      </td>
+      <td className="py-3 pr-3">
+        <input
+          type="text"
+          value={draft.form.position}
+          onChange={(event) => onDraftChange(draft.key, 'position', event.target.value)}
+          className={tableInputClass(false)}
+          placeholder="직급"
+        />
+      </td>
+      <td className="py-3 pr-3">
+        <select
+          value={draft.form.status}
+          onChange={(event) =>
+            onDraftChange(draft.key, 'status', event.target.value as ParticipantFormState['status'])
+          }
+          className={tableInputClass(false)}
+        >
+          <option value="pending">대기</option>
+          <option value="approved">승인</option>
+          <option value="rejected">거절</option>
+        </select>
+      </td>
+      <td className="py-3">
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-white px-2 py-1 text-xs font-medium text-[#80766b]">
+            {draft.mode === 'new' ? '신규' : '수정 중'}
+          </span>
+          <button
+            onClick={() => onCancel(draft.key)}
+            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+            title="취소"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
 
 function TeamsTab({
   teams,
@@ -733,28 +1428,27 @@ function TeamsTab({
 }) {
   return (
     <>
-      {/* 자동 매칭 섹션 */}
       <Card className="mb-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Shuffle className="w-5 h-5 text-[#80766b]" />
+        <div className="mb-4 flex items-center gap-2">
+          <Shuffle className="h-5 w-5 text-[#80766b]" />
           <h3 className="text-sm font-semibold text-gray-700">자동 매칭</h3>
         </div>
 
         <div className="flex flex-wrap items-end gap-4">
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">팀 크기</label>
+            <label className="mb-1 block text-xs font-medium text-gray-500">팀 크기</label>
             <input
               type="number"
               min={1}
               max={20}
               value={matchOptions.teamSize}
-              onChange={(e) =>
+              onChange={(event) =>
                 setMatchOptions((prev) => ({
                   ...prev,
-                  teamSize: Math.max(1, Number(e.target.value) || 1),
+                  teamSize: Math.max(1, Number(event.target.value) || 1),
                 }))
               }
-              className="w-20 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#80766b]/30"
+              className="w-20 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#80766b]/30"
             />
           </div>
 
@@ -762,16 +1456,16 @@ function TeamsTab({
             {[
               { key: 'spreadDepartment' as const, label: '부서 분산' },
               { key: 'spreadPosition' as const, label: '직급 분산' },
-              { key: 'limitLeader' as const, label: '리더급 제한' },
+              { key: 'limitLeader' as const, label: '리더 제한' },
             ].map(({ key, label }) => (
-              <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
+              <label key={key} className="flex cursor-pointer items-center gap-2 select-none">
                 <input
                   type="checkbox"
                   checked={matchOptions[key]}
-                  onChange={(e) =>
-                    setMatchOptions((prev) => ({ ...prev, [key]: e.target.checked }))
+                  onChange={(event) =>
+                    setMatchOptions((prev) => ({ ...prev, [key]: event.target.checked }))
                   }
-                  className="w-4 h-4 accent-[#80766b]"
+                  className="h-4 w-4 accent-[#80766b]"
                 />
                 <span className="text-sm text-gray-600">{label}</span>
               </label>
@@ -780,103 +1474,90 @@ function TeamsTab({
 
           <button
             onClick={onAutoMatch}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#fcaf17] text-white text-sm font-semibold rounded-lg hover:bg-[#e09c10] transition-colors shrink-0"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#fcaf17] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#e09c10]"
           >
-            <Shuffle className="w-4 h-4" />
+            <Shuffle className="h-4 w-4" />
             자동 매칭 실행
           </button>
         </div>
       </Card>
 
-      {/* 팀 추가 버튼 */}
-      <div className="flex justify-end mb-4">
+      <div className="mb-4 flex justify-end">
         <button
           onClick={onAddTeam}
-          className="flex items-center gap-1.5 px-3 py-2 bg-[#80766b] text-white text-sm font-medium rounded-lg hover:bg-[#6e645a] transition-colors"
+          className="flex items-center gap-1.5 rounded-lg bg-[#80766b] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#6e645a]"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="h-4 w-4" />
           팀 추가
         </button>
       </div>
 
-      {/* 팀 카드 그리드 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {teams.map((team) => {
-          const members = participants.filter((p) => p.team === team.id);
+          const members = participants.filter((participant) => participant.team === team.id);
           return (
             <Card key={team.id} className={team.locked ? 'ring-1 ring-amber-200' : ''}>
-              {/* 팀 헤더 */}
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-2 min-w-0">
-                  <h3 className="font-semibold text-gray-800 truncate">{team.name}</h3>
+              <div className="mb-3 flex items-start justify-between">
+                <div className="min-w-0 flex items-center gap-2">
+                  <h3 className="truncate font-semibold text-gray-800">{team.name}</h3>
                   {team.locked && (
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-md shrink-0">
-                      <Lock className="w-3 h-3" />
-                      잠김
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700">
+                      <Lock className="h-3 w-3" />
+                      잠금
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex shrink-0 items-center gap-1">
                   <button
                     onClick={() => onToggleLock(team.id)}
-                    className={`p-1.5 rounded-lg transition-colors ${
+                    className={`rounded-lg p-1.5 transition-colors ${
                       team.locked
                         ? 'text-amber-500 hover:bg-amber-50'
-                        : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                        : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
                     }`}
                     title={team.locked ? '잠금 해제' : '잠금'}
                   >
-                    {team.locked ? (
-                      <Lock className="w-4 h-4" />
-                    ) : (
-                      <Unlock className="w-4 h-4" />
-                    )}
+                    {team.locked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
                   </button>
                   <button
                     onClick={() => onEditTeam(team.id)}
                     disabled={team.locked}
-                    className="p-1.5 text-gray-400 hover:text-[#80766b] hover:bg-[#80766b]/10 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-[#80766b]/10 hover:text-[#80766b] disabled:cursor-not-allowed disabled:opacity-30"
                     title="수정"
                   >
-                    <Pencil className="w-4 h-4" />
+                    <Pencil className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => onDeleteTeam(team.id)}
                     disabled={team.locked}
-                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-30"
                     title="삭제"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
               </div>
 
-              {team.idea && (
-                <p className="text-xs text-gray-500 line-clamp-2 mb-3">{team.idea}</p>
-              )}
+              {team.idea && <p className="mb-3 line-clamp-2 text-xs text-gray-500">{team.idea}</p>}
 
-              {/* 팀원 목록 */}
               <div className="border-t border-gray-100 pt-3">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Users className="w-3.5 h-3.5 text-gray-400" />
-                  <span className="text-xs text-gray-400 font-medium">
-                    팀원 {members.length}명
+                <div className="mb-2 flex items-center gap-1.5">
+                  <Users className="h-3.5 w-3.5 text-gray-400" />
+                  <span className="text-xs font-medium text-gray-400">
+                    참가자 {members.length}명
                   </span>
                 </div>
                 {members.length === 0 ? (
-                  <p className="text-xs text-gray-300 italic">배정된 팀원이 없습니다</p>
+                  <p className="text-xs italic text-gray-300">배정된 참가자가 없습니다.</p>
                 ) : (
                   <div className="space-y-1.5">
-                    {members.map((m) => (
-                      <div
-                        key={m.id}
-                        className="flex items-center justify-between gap-2"
-                      >
-                        <span className="text-sm font-medium text-gray-700">{m.name}</span>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="text-xs text-gray-400">{m.department}</span>
-                          <span className="text-xs text-gray-300">·</span>
-                          <span className="text-xs text-gray-400">{m.position}</span>
+                    {members.map((member) => (
+                      <div key={member.id} className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium text-gray-700">{member.name}</span>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <span className="text-xs text-gray-400">{member.department}</span>
+                          <span className="text-xs text-gray-300">/</span>
+                          <span className="text-xs text-gray-400">{member.position}</span>
                         </div>
                       </div>
                     ))}

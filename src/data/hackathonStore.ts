@@ -8,7 +8,13 @@ import {
   apiUpdateParticipant,
   apiDeleteParticipant,
 } from '../api/participants';
-import { apiFetchTeams, apiAddTeam, apiUpdateTeam, apiDeleteTeam } from '../api/teams';
+import {
+  apiFetchTeams,
+  apiAddTeam,
+  apiUpdateTeam,
+  apiDeleteTeam,
+  type TeamRow,
+} from '../api/teams';
 import type { Participant } from './mockData';
 
 // ── 타입 정의 ──────────────────────────────────────────────────
@@ -39,8 +45,8 @@ const LEADER_POSITIONS = ['과장', '차장', '부장', '팀장', '수석'];
 
 // ── 참가자 mutations ──────────────────────────────────────────
 
-export async function addParticipant(data: Omit<Participant, 'id'>): Promise<void> {
-  await apiAddParticipant(data);
+export async function addParticipant(data: Omit<Participant, 'id'>): Promise<Participant> {
+  return apiAddParticipant(data);
 }
 
 export async function updateParticipant(
@@ -56,8 +62,8 @@ export async function deleteParticipant(id: string): Promise<void> {
 
 // ── 팀 mutations ──────────────────────────────────────────────
 
-export async function addTeam(data: Pick<Team, 'name' | 'idea'>): Promise<void> {
-  await apiAddTeam(data);
+export async function addTeam(data: Pick<Team, 'name' | 'idea'>): Promise<TeamRow> {
+  return apiAddTeam(data);
 }
 
 export async function updateTeam(

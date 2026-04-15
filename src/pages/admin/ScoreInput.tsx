@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
 import Card from '../../components/ui/Card';
 import { useTeams } from '../../hooks/useTeams';
 import { useJudgeScores } from '../../hooks/useJudgeScores';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import {
   SCORE_CRITERIA,
+  type JudgeScore,
   updateScore,
 } from '../../data/scoreStore';
 import { ArrowLeft, Save, CheckCircle2 } from 'lucide-react';
@@ -14,7 +15,7 @@ import { ArrowLeft, Save, CheckCircle2 } from 'lucide-react';
 type TeamDraft = { creativity: number; completion: number; presentation: number };
 type DraftScores = Record<string, TeamDraft>;
 
-function buildDraft(scores: ReturnType<typeof useJudgeScores>): DraftScores {
+function buildDraft(scores: JudgeScore[]): DraftScores {
   return Object.fromEntries(
     scores.map((s) => [
       s.teamId,
@@ -31,18 +32,17 @@ export default function ScoreInput() {
   const judgeId = user?.id ?? '';
   const judgeName = user?.name ?? '';
 
-  const judgeScores = useJudgeScores(judgeId, judgeName);
+  const { data: judgeScores, refetch: refetchJudgeScores } = useJudgeScores(judgeId, judgeName);
 
   const [draft, setDraft] = useState<DraftScores>({});
   const [saved, setSaved] = useState<Set<string>>(new Set());
-  const hydrated = useRef(false);
+  const effectiveDraft = useMemo(
+    () => (Object.keys(draft).length > 0 ? draft : buildDraft(judgeScores)),
+    [draft, judgeScores]
+  );
+  const isHydrated = judgeScores.length > 0;
 
   // judgeScores는 비동기로 로드되므로 첫 데이터 도착 시 한 번만 draft를 초기화
-  useEffect(() => {
-    if (hydrated.current || judgeScores.length === 0) return;
-    setDraft(buildDraft(judgeScores));
-    hydrated.current = true;
-  }, [judgeScores]);
 
   const setField = (
     teamId: string,
@@ -53,7 +53,11 @@ export default function ScoreInput() {
     const val = Math.min(max, Math.max(0, Number(raw) || 0));
     setDraft((prev) => ({
       ...prev,
-      [teamId]: { ...(prev[teamId] ?? { creativity: 0, completion: 0, presentation: 0 }), [field]: val },
+      [teamId]: {
+        ...(prev[teamId] ??
+          effectiveDraft[teamId] ?? { creativity: 0, completion: 0, presentation: 0 }),
+        [field]: val,
+      },
     }));
     setSaved((prev) => {
       const next = new Set(prev);
@@ -63,9 +67,11 @@ export default function ScoreInput() {
   };
 
   const handleSave = async (teamId: string) => {
-    const d = draft[teamId] ?? { creativity: 0, completion: 0, presentation: 0 };
+    const d = effectiveDraft[teamId] ?? { creativity: 0, completion: 0, presentation: 0 };
     try {
       await updateScore(judgeId, judgeName, teamId, d);
+      const refreshed = await refetchJudgeScores();
+      setDraft(buildDraft(refreshed));
       setSaved((prev) => new Set(prev).add(teamId));
     } catch {
       console.error('점수 저장 실패');
@@ -76,10 +82,12 @@ export default function ScoreInput() {
     try {
       await Promise.all(
         teams.map((t) => {
-          const d = draft[t.id] ?? { creativity: 0, completion: 0, presentation: 0 };
+          const d = effectiveDraft[t.id] ?? { creativity: 0, completion: 0, presentation: 0 };
           return updateScore(judgeId, judgeName, t.id, d);
         })
       );
+      const refreshed = await refetchJudgeScores();
+      setDraft(buildDraft(refreshed));
       setSaved(new Set(teams.map((t) => t.id)));
     } catch {
       console.error('전체 점수 저장 실패');
@@ -87,14 +95,14 @@ export default function ScoreInput() {
   };
 
   const getTotal = (teamId: string) => {
-    const d = draft[teamId] ?? { creativity: 0, completion: 0, presentation: 0 };
+    const d = effectiveDraft[teamId] ?? { creativity: 0, completion: 0, presentation: 0 };
     return d.creativity + d.completion + d.presentation;
   };
 
   const isChanged = (teamId: string) => {
     const original = judgeScores.find((s) => s.teamId === teamId);
     if (!original) return true;
-    const d = draft[teamId] ?? { creativity: 0, completion: 0, presentation: 0 };
+    const d = effectiveDraft[teamId] ?? { creativity: 0, completion: 0, presentation: 0 };
     return (
       d.creativity !== original.creativity ||
       d.completion !== original.completion ||
@@ -119,7 +127,7 @@ export default function ScoreInput() {
         </div>
         <button
           onClick={handleSaveAll}
-          disabled={!hydrated.current}
+          disabled={!isHydrated}
           className="flex items-center gap-1.5 px-3 py-2 bg-[#80766b] text-white text-sm font-medium rounded-lg hover:bg-[#6e645a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           <Save className="w-4 h-4" />
@@ -163,7 +171,7 @@ export default function ScoreInput() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {teams.map((team) => {
-                  const d = draft[team.id] ?? { creativity: 0, completion: 0, presentation: 0 };
+                  const d = effectiveDraft[team.id] ?? { creativity: 0, completion: 0, presentation: 0 };
                   const total = getTotal(team.id);
                   const isSaved = saved.has(team.id);
                   const changed = isChanged(team.id);
@@ -215,7 +223,7 @@ export default function ScoreInput() {
       {/* ── 모바일 카드 입력 ── */}
       <div className="sm:hidden space-y-4">
         {teams.map((team) => {
-          const d = draft[team.id] ?? { creativity: 0, completion: 0, presentation: 0 };
+          const d = effectiveDraft[team.id] ?? { creativity: 0, completion: 0, presentation: 0 };
           const total = getTotal(team.id);
           const isSaved = saved.has(team.id);
           const changed = isChanged(team.id);

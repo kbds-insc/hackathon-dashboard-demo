@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 import {
   apiFetchNotifications,
   apiMarkNotificationRead,
@@ -10,28 +10,39 @@ import type { Notification } from '../data/mockData';
 
 export function useNotifications() {
   const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [list, setList] = useState<Notification[]>([]);
 
-  const load = useCallback(async () => {
-    if (!user?.id) return;
-    try {
-      const data = await apiFetchNotifications(user.id);
-      setList(data);
-    } catch (e) {
-      console.error(e);
-    }
-  }, [user?.id]);
-
   useEffect(() => {
+    if (!userId) {
+      return;
+    }
+
+    let cancelled = false;
+    const currentUserId = userId;
+    async function load() {
+      try {
+        const data = await apiFetchNotifications(currentUserId);
+        if (!cancelled) setList(data);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
     load();
 
     const channel = supabase
       .channel('hook-notifications')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => {
+        load();
+      })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, [load]);
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [userId]);
 
   const markRead = async (id: string) => {
     await apiMarkNotificationRead(id);
@@ -39,8 +50,8 @@ export function useNotifications() {
   };
 
   const markAllRead = async () => {
-    if (!user?.id) return;
-    await apiMarkAllNotificationsRead(user.id);
+    if (!userId) return;
+    await apiMarkAllNotificationsRead(userId);
     setList((prev) => prev.map((n) => ({ ...n, isRead: true })));
   };
 
