@@ -9,7 +9,7 @@ import { Plus, Pencil, Trash2, X, ChevronDown, ChevronUp } from 'lucide-react';
 type FormMode = 'add' | 'edit';
 
 export default function Notices() {
-  const notices = useNotices();
+  const { data: notices, refetch } = useNotices();
 
   const [showForm, setShowForm] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>('add');
@@ -60,6 +60,7 @@ export default function Notices() {
       } else if (editId) {
         await apiUpdateNotice(editId, { title: titleInput.trim(), content: contentInput.trim() });
       }
+      refetch();
       closeForm();
     } catch {
       console.error('공지 저장 실패');
@@ -71,6 +72,7 @@ export default function Notices() {
   const handleDelete = async (id: string) => {
     try {
       await apiDeleteNotice(id);
+      refetch();
     } catch {
       console.error('공지 삭제 실패');
     }

@@ -13,7 +13,7 @@ export default function Dashboard() {
   const participants = useParticipants();
   const scores = useScores();
 
-  const notices = useNotices();
+  const { data: notices } = useNotices();
   const submittedCount = teams.filter((t) => t.submitStatus === 'submitted').length;
   const scoredCount = scores.filter((s) => s.total > 0).length;
   const recentNotices = notices.slice(0, 3);

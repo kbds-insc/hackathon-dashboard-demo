@@ -25,7 +25,7 @@ export default function Scoring() {
     return [...map.values()];
   }, [allJudgeScores]);
 
-  const TOTAL_JUDGES = judges.length || 1; // 0 나누기 방지
+  const TOTAL_JUDGES = judges.length;
 
   const ranked = [...scores]
     .sort((a, b) => b.total - a.total)
@@ -130,13 +130,13 @@ export default function Scoring() {
                         </td>
                         <td className="py-3.5 text-center">
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                            row.judgeCount === TOTAL_JUDGES
+                            TOTAL_JUDGES > 0 && row.judgeCount === TOTAL_JUDGES
                               ? 'bg-green-100 text-green-700'
                               : row.judgeCount > 0
                               ? 'bg-amber-100 text-amber-700'
                               : 'bg-gray-100 text-gray-400'
                           }`}>
-                            {row.judgeCount}/{TOTAL_JUDGES}명
+                            {TOTAL_JUDGES > 0 ? `${row.judgeCount}/${TOTAL_JUDGES}명` : '-'}
                           </span>
                         </td>
                         <td className="py-3.5 pl-2">
@@ -210,11 +210,11 @@ export default function Scoring() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                      row.judgeCount === TOTAL_JUDGES ? 'bg-green-100 text-green-700'
+                      TOTAL_JUDGES > 0 && row.judgeCount === TOTAL_JUDGES ? 'bg-green-100 text-green-700'
                       : row.judgeCount > 0 ? 'bg-amber-100 text-amber-700'
                       : 'bg-gray-100 text-gray-400'
                     }`}>
-                      {row.judgeCount}/{TOTAL_JUDGES}
+                      {TOTAL_JUDGES > 0 ? `${row.judgeCount}/${TOTAL_JUDGES}` : '-'}
                     </span>
                     <span className={`text-2xl font-bold ${isFirst ? 'text-yellow-600' : row.total > 0 ? 'text-gray-800' : 'text-gray-300'}`}>
                       {row.total > 0 ? row.total : '-'}

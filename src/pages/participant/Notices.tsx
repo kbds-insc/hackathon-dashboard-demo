@@ -4,7 +4,7 @@ import { useNotices } from '../../hooks/useNotices';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function ParticipantNotices() {
-  const notices = useNotices();
+  const { data: notices } = useNotices();
   const sorted = [...notices].sort((a, b) => b.date.localeCompare(a.date));
   const latestDate = sorted[0]?.date;
 
