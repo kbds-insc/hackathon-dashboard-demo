@@ -1,20 +1,18 @@
 import type { ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Users, Calendar, Megaphone, Upload, Bell } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Users, Calendar, Megaphone, Upload, Bell, LogOut } from 'lucide-react';
 import { notifications } from '../../data/mockData';
+import { useAuth } from '../../contexts/AuthContext';
 
 // 읽지 않은 알림 수 (실제 앱에선 상태/컨텍스트로 관리)
 const UNREAD_COUNT = notifications.filter((n) => !n.isRead).length;
 
-// 임시 참가자 정보 (실제 앱에선 인증 컨텍스트에서 가져옴)
-const CURRENT_USER = { name: '김민준', team: '1조' };
-
 const NAV_ITEMS = [
-  { path: '/participant',              label: '내 팀',    icon: Users },
-  { path: '/participant/schedule',     label: '일정',     icon: Calendar },
-  { path: '/participant/notices',      label: '공지사항', icon: Megaphone },
-  { path: '/participant/submit',       label: '제출하기', icon: Upload },
-  { path: '/participant/notifications', label: '알림',   icon: Bell },
+  { path: '/participant',               label: '내 팀',    icon: Users },
+  { path: '/participant/schedule',      label: '일정',     icon: Calendar },
+  { path: '/participant/notices',       label: '공지사항', icon: Megaphone },
+  { path: '/participant/submit',        label: '제출하기', icon: Upload },
+  { path: '/participant/notifications', label: '알림',     icon: Bell },
 ];
 
 function useActiveNav() {
@@ -30,6 +28,17 @@ interface ParticipantLayoutProps {
 
 export default function ParticipantLayout({ children }: ParticipantLayoutProps) {
   const { isActive } = useActiveNav();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/login', { replace: true });
+  };
+
+  const displayName = user?.name ?? '참가자';
+  // Phase 4에서 DB 연동 시 실제 팀 정보로 교체
+  const displayTeam = '내 팀';
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -40,8 +49,8 @@ export default function ParticipantLayout({ children }: ParticipantLayoutProps) 
           <Link to="/participant" className="text-base font-bold text-[#80766b] tracking-tight">
             해커톤 2026
           </Link>
-          <p className="mt-2 text-xs text-gray-500 font-medium">{CURRENT_USER.team}</p>
-          <p className="text-xs text-gray-400">{CURRENT_USER.name}</p>
+          <p className="mt-2 text-xs text-gray-500 font-medium">{displayTeam}</p>
+          <p className="text-xs text-gray-400">{displayName}</p>
         </div>
 
         {/* 사이드바 메뉴 */}
@@ -65,15 +74,28 @@ export default function ParticipantLayout({ children }: ParticipantLayoutProps) 
                       className={`w-4 h-4 shrink-0 ${active ? 'text-[#80766b]' : 'text-gray-400'}`}
                     />
                     <span className="flex-1">{label}</span>
-                    {showBadge && (
-                      <UnreadBadge count={UNREAD_COUNT} />
-                    )}
+                    {showBadge && <UnreadBadge count={UNREAD_COUNT} />}
                   </Link>
                 </li>
               );
             })}
           </ul>
         </nav>
+
+        {/* 로그아웃 */}
+        <div className="px-3 py-4 border-t border-gray-100">
+          <div className="px-3 mb-2">
+            <p className="text-xs font-medium text-gray-700 truncate">{displayName}</p>
+            <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+          >
+            <LogOut className="w-4 h-4 shrink-0" />
+            로그아웃
+          </button>
+        </div>
       </aside>
 
       {/* ── 메인 영역 ───────────────────────────────────────── */}
@@ -90,11 +112,11 @@ export default function ParticipantLayout({ children }: ParticipantLayoutProps) 
 
           {/* 팀명 + 이름 (데스크탑) */}
           <div className="hidden lg:flex flex-col leading-none">
-            <span className="text-sm font-semibold text-gray-800">{CURRENT_USER.team}</span>
-            <span className="text-xs text-gray-400 mt-0.5">{CURRENT_USER.name}</span>
+            <span className="text-sm font-semibold text-gray-800">{displayTeam}</span>
+            <span className="text-xs text-gray-400 mt-0.5">{displayName}</span>
           </div>
 
-          {/* 우측: 모바일 알림 아이콘 */}
+          {/* 우측 */}
           <div className="ml-auto flex items-center gap-2">
             <Link
               to="/participant/notifications"
@@ -108,10 +130,18 @@ export default function ParticipantLayout({ children }: ParticipantLayoutProps) 
               )}
             </Link>
 
-            {/* 데스크탑: 참가자 상태 뱃지 */}
             <span className="hidden lg:inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#80766b]/10 text-[#80766b] ring-1 ring-[#80766b]/20">
               참가자
             </span>
+
+            {/* 로그아웃 아이콘 (데스크탑) */}
+            <button
+              onClick={handleLogout}
+              title="로그아웃"
+              className="hidden lg:flex p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </header>
 

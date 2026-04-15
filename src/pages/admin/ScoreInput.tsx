@@ -4,23 +4,19 @@ import AdminLayout from '../../components/layout/AdminLayout';
 import Card from '../../components/ui/Card';
 import { useTeams } from '../../hooks/useTeams';
 import { useJudgeScores } from '../../hooks/useJudgeScores';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   SCORE_CRITERIA,
-  MOCK_JUDGES,
   updateScore,
-  getScoresByJudge,
 } from '../../data/scoreStore';
-import { ArrowLeft, Save, CheckCircle2, User } from 'lucide-react';
+import { ArrowLeft, Save, CheckCircle2 } from 'lucide-react';
 
 type TeamDraft = { creativity: number; completion: number; presentation: number };
 type DraftScores = Record<string, TeamDraft>;
-// 심사위원별 draft를 하나의 Record에 저장 (useEffect 없이 judge 전환 시 독립 유지)
-type AllDrafts = Record<string, DraftScores>;
-type AllSaved = Record<string, Set<string>>;
 
-function buildDraft(judgeId: string): DraftScores {
+function buildDraft(scores: ReturnType<typeof useJudgeScores>): DraftScores {
   return Object.fromEntries(
-    getScoresByJudge(judgeId).map((s) => [
+    scores.map((s) => [
       s.teamId,
       { creativity: s.creativity, completion: s.completion, presentation: s.presentation },
     ])
@@ -29,21 +25,18 @@ function buildDraft(judgeId: string): DraftScores {
 
 export default function ScoreInput() {
   const teams = useTeams();
+  const { user } = useAuth();
 
-  // ── 임시 심사위원 선택 (Phase 2에서 AuthContext로 교체) ──────
-  const [currentJudgeId, setCurrentJudgeId] = useState(MOCK_JUDGES[0].id);
-  const currentJudge = MOCK_JUDGES.find((j) => j.id === currentJudgeId)!;
+  // 로그인된 사용자를 심사위원으로 사용
+  const judgeId = user?.id ?? '';
+  const judgeName = user?.name ?? '';
 
-  const judgeScores = useJudgeScores(currentJudgeId);
+  const judgeScores = useJudgeScores(judgeId);
 
-  // 심사위원별 draft/saved를 하나의 Record에 저장 → useEffect 불필요
-  const [allDrafts, setAllDrafts] = useState<AllDrafts>(() => ({
-    [MOCK_JUDGES[0].id]: buildDraft(MOCK_JUDGES[0].id),
-  }));
-  const [allSaved, setAllSaved] = useState<AllSaved>({});
-
-  const draft = allDrafts[currentJudgeId] ?? buildDraft(currentJudgeId);
-  const saved = allSaved[currentJudgeId] ?? new Set<string>();
+  const [draft, setDraft] = useState<DraftScores>(() =>
+    buildDraft(judgeScores)
+  );
+  const [saved, setSaved] = useState<Set<string>>(new Set());
 
   const setField = (
     teamId: string,
@@ -52,42 +45,29 @@ export default function ScoreInput() {
   ) => {
     const max = SCORE_CRITERIA.find((c) => c.key === field)!.max;
     const val = Math.min(max, Math.max(0, Number(raw) || 0));
-    setAllDrafts((prev) => {
-      const cur = prev[currentJudgeId] ?? buildDraft(currentJudgeId);
-      return {
-        ...prev,
-        [currentJudgeId]: {
-          ...cur,
-          [teamId]: { ...(cur[teamId] ?? { creativity: 0, completion: 0, presentation: 0 }), [field]: val },
-        },
-      };
-    });
-    setAllSaved((prev) => {
-      const next = new Set(prev[currentJudgeId] ?? []);
+    setDraft((prev) => ({
+      ...prev,
+      [teamId]: { ...(prev[teamId] ?? { creativity: 0, completion: 0, presentation: 0 }), [field]: val },
+    }));
+    setSaved((prev) => {
+      const next = new Set(prev);
       next.delete(teamId);
-      return { ...prev, [currentJudgeId]: next };
+      return next;
     });
   };
 
   const handleSave = (teamId: string) => {
     const d = draft[teamId] ?? { creativity: 0, completion: 0, presentation: 0 };
-    updateScore(currentJudgeId, currentJudge.name, teamId, d);
-    setAllSaved((prev) => {
-      const next = new Set(prev[currentJudgeId] ?? []);
-      next.add(teamId);
-      return { ...prev, [currentJudgeId]: next };
-    });
+    updateScore(judgeId, judgeName, teamId, d);
+    setSaved((prev) => new Set(prev).add(teamId));
   };
 
   const handleSaveAll = () => {
     teams.forEach((t) => {
       const d = draft[t.id] ?? { creativity: 0, completion: 0, presentation: 0 };
-      updateScore(currentJudgeId, currentJudge.name, t.id, d);
+      updateScore(judgeId, judgeName, t.id, d);
     });
-    setAllSaved((prev) => ({
-      ...prev,
-      [currentJudgeId]: new Set(teams.map((t) => t.id)),
-    }));
+    setSaved(new Set(teams.map((t) => t.id)));
   };
 
   const getTotal = (teamId: string) => {
@@ -130,28 +110,10 @@ export default function ScoreInput() {
         </button>
       </div>
 
-      {/* ── 심사위원 선택 (임시 — Phase 2에서 로그인으로 교체) ── */}
-      <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-        <div className="flex items-center gap-2 mb-3">
-          <User className="w-4 h-4 text-amber-600" />
-          <span className="text-sm font-medium text-amber-800">심사위원 선택</span>
-          <span className="text-xs text-amber-500 ml-auto">* 로그인 구현 후 자동 식별로 교체됩니다</span>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {MOCK_JUDGES.map((judge) => (
-            <button
-              key={judge.id}
-              onClick={() => setCurrentJudgeId(judge.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                currentJudgeId === judge.id
-                  ? 'bg-[#80766b] text-white'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              {judge.name}
-            </button>
-          ))}
-        </div>
+      {/* ── 심사위원 정보 ── */}
+      <div className="mb-6 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl flex items-center gap-2 text-sm text-gray-600">
+        <span className="font-medium text-gray-800">{judgeName}</span>
+        <span className="text-gray-400">심사위원으로 입력 중</span>
       </div>
 
       {/* ── 평가 기준 안내 ── */}
