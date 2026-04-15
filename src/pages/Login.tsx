@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Trophy, Eye, EyeOff } from 'lucide-react';
 
 export default function Login() {
   const { signIn, user } = useAuth();
-  const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,8 +18,7 @@ export default function Login() {
       user.role === 'admin' ? '/admin' :
       user.role === 'judge' ? '/admin/score-input' :
       '/participant';
-    navigate(dest, { replace: true });
-    return null;
+    return <Navigate to={dest} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

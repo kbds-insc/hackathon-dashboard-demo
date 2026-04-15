@@ -31,6 +31,8 @@ export function useCurrentParticipant(): CurrentParticipant {
       if (p?.team) {
         const t = await apiFetchTeamById(p.team);
         if (!cancelled) setTeam(t);
+      } else {
+        if (!cancelled) setTeam(null);
       }
       if (!cancelled) setLoading(false);
     }

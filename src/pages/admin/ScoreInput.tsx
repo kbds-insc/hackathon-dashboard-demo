@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
 import Card from '../../components/ui/Card';
@@ -33,10 +33,16 @@ export default function ScoreInput() {
 
   const judgeScores = useJudgeScores(judgeId, judgeName);
 
-  const [draft, setDraft] = useState<DraftScores>(() =>
-    buildDraft(judgeScores)
-  );
+  const [draft, setDraft] = useState<DraftScores>({});
   const [saved, setSaved] = useState<Set<string>>(new Set());
+  const hydrated = useRef(false);
+
+  // judgeScores는 비동기로 로드되므로 첫 데이터 도착 시 한 번만 draft를 초기화
+  useEffect(() => {
+    if (hydrated.current || judgeScores.length === 0) return;
+    setDraft(buildDraft(judgeScores));
+    hydrated.current = true;
+  }, [judgeScores]);
 
   const setField = (
     teamId: string,
@@ -113,7 +119,8 @@ export default function ScoreInput() {
         </div>
         <button
           onClick={handleSaveAll}
-          className="flex items-center gap-1.5 px-3 py-2 bg-[#80766b] text-white text-sm font-medium rounded-lg hover:bg-[#6e645a] transition-colors"
+          disabled={!hydrated.current}
+          className="flex items-center gap-1.5 px-3 py-2 bg-[#80766b] text-white text-sm font-medium rounded-lg hover:bg-[#6e645a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           <Save className="w-4 h-4" />
           전체 저장
