@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 import { apiFetchParticipantByEmail } from '../api/participants';
 import { apiFetchTeamById } from '../api/teams';
 import type { Participant } from '../data/mockData';
@@ -13,19 +13,19 @@ export interface CurrentParticipant {
 
 export function useCurrentParticipant(): CurrentParticipant {
   const { user } = useAuth();
+  const email = user?.email ?? null;
   const [participant, setParticipant] = useState<Participant | null>(null);
   const [team, setTeam] = useState<TeamRow | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(email));
 
   useEffect(() => {
-    if (!user?.email) {
-      setLoading(false);
-      return;
-    }
+    if (!email) return;
+
     let cancelled = false;
+    const currentEmail = email;
     async function load() {
       setLoading(true);
-      const p = await apiFetchParticipantByEmail(user!.email);
+      const p = await apiFetchParticipantByEmail(currentEmail);
       if (cancelled) return;
       setParticipant(p);
       if (p?.team) {
@@ -38,7 +38,11 @@ export function useCurrentParticipant(): CurrentParticipant {
     }
     load();
     return () => { cancelled = true; };
-  }, [user?.email]);
+  }, [email]);
 
-  return { participant, team, loading };
+  return {
+    participant: email ? participant : null,
+    team: email ? team : null,
+    loading: email ? loading : false,
+  };
 }

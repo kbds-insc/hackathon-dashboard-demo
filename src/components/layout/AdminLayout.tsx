@@ -11,7 +11,7 @@ import {
   X,
   LogOut,
 } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 
 const NAV_ITEMS = [
   { path: '/admin',              label: '대시보드',    icon: LayoutDashboard, roles: ['admin'] },
