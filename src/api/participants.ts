@@ -1,6 +1,15 @@
 import { supabase } from '../lib/supabase';
 import type { Participant } from '../data/mockData';
 
+// supabase.functions.invoke()의 기본 Authorization 헤더는 anon 키이므로
+// Edge Function 호출 시 세션 JWT를 명시적으로 전달해야 한다.
+// (Supabase 인프라의 verify_jwt 활성화 시 anon 키 → 401 반환)
+async function edgeFnHeaders(): Promise<{ Authorization: string }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('인증 세션이 없습니다.');
+  return { Authorization: `Bearer ${session.access_token}` };
+}
+
 interface DBParticipant {
   id: string;
   user_id: string | null;
@@ -67,6 +76,7 @@ export async function apiCreateParticipantWithAuth(
       team_id: p.team || null,
       status: p.status,
     },
+    headers: await edgeFnHeaders(),
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
@@ -106,7 +116,10 @@ export async function apiUpdateParticipantWithAuth(
     if ('department' in partial) body.department = partial.department;
     if ('position' in partial) body.position = partial.position;
     if ('status' in partial) body.status = partial.status;
-    const { data, error } = await supabase.functions.invoke('participant-admin', { body });
+    const { data, error } = await supabase.functions.invoke('participant-admin', {
+      body,
+      headers: await edgeFnHeaders(),
+    });
     if (error) throw error;
     if (data?.error) throw new Error(data.error);
   } else {
@@ -130,6 +143,7 @@ export async function apiDeleteParticipantWithAuth(
       participant_id: participantId,
       user_id: userId,
     },
+    headers: await edgeFnHeaders(),
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
