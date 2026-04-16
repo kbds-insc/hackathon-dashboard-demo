@@ -1,13 +1,29 @@
 import { supabase } from '../lib/supabase';
 import type { Participant } from '../data/mockData';
 
-// supabase.functions.invoke()의 기본 Authorization 헤더는 anon 키이므로
-// Edge Function 호출 시 세션 JWT를 명시적으로 전달해야 한다.
-// (Supabase 인프라의 verify_jwt 활성화 시 anon 키 → 401 반환)
-async function edgeFnHeaders(): Promise<{ Authorization: string }> {
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+// supabase.functions.invoke() 대신 fetch() 직접 사용 — 헤더를 완전히 제어
+// Authorization: Bearer <user_jwt>  (verify_jwt 통과)
+// apikey: <anon_key>                (Supabase 프로젝트 식별)
+async function callAdminFn(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error('인증 세션이 없습니다.');
-  return { Authorization: `Bearer ${session.access_token}` };
+
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/participant-admin`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.access_token}`,
+      'apikey': SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await res.json() as Record<string, unknown>;
+  if (!res.ok || data?.error) throw new Error((data?.error as string) ?? `HTTP ${res.status}`);
+  return data;
 }
 
 interface DBParticipant {
@@ -65,21 +81,16 @@ export async function apiCreateParticipantWithAuth(
   p: Omit<Participant, 'id'>,
   password: string
 ): Promise<Participant> {
-  const { data, error } = await supabase.functions.invoke('participant-admin', {
-    body: {
-      action: 'create',
-      name: p.name,
-      email: p.email,
-      password,
-      department: p.department,
-      position: p.position,
-      team_id: p.team || null,
-      status: p.status,
-    },
-    headers: await edgeFnHeaders(),
+  const data = await callAdminFn({
+    action: 'create',
+    name: p.name,
+    email: p.email,
+    password,
+    department: p.department,
+    position: p.position,
+    team_id: p.team || null,
+    status: p.status,
   });
-  if (error) throw error;
-  if (data?.error) throw new Error(data.error);
   return fromDB(data.participant as DBParticipant);
 }
 
@@ -116,12 +127,7 @@ export async function apiUpdateParticipantWithAuth(
     if ('department' in partial) body.department = partial.department;
     if ('position' in partial) body.position = partial.position;
     if ('status' in partial) body.status = partial.status;
-    const { data, error } = await supabase.functions.invoke('participant-admin', {
-      body,
-      headers: await edgeFnHeaders(),
-    });
-    if (error) throw error;
-    if (data?.error) throw new Error(data.error);
+    await callAdminFn(body);
   } else {
     await apiUpdateParticipant(participantId, partial);
   }
@@ -137,16 +143,11 @@ export async function apiDeleteParticipantWithAuth(
   participantId: string,
   userId: string
 ): Promise<void> {
-  const { data, error } = await supabase.functions.invoke('participant-admin', {
-    body: {
-      action: 'delete',
-      participant_id: participantId,
-      user_id: userId,
-    },
-    headers: await edgeFnHeaders(),
+  await callAdminFn({
+    action: 'delete',
+    participant_id: participantId,
+    user_id: userId,
   });
-  if (error) throw error;
-  if (data?.error) throw new Error(data.error);
 }
 
 export async function apiFetchParticipantByEmail(email: string): Promise<Participant | null> {
