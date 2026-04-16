@@ -10,7 +10,6 @@
 // );
 
 import { supabase } from '../lib/supabase';
-import { apiUpdateTeam } from './teams';
 
 export interface Submission {
   id: string;
@@ -77,5 +76,4 @@ export async function apiUpsertSubmission(
       { onConflict: 'team_id' }
     );
   if (error) throw error;
-  await apiUpdateTeam(teamId, { submit_status: 'submitted' });
 }

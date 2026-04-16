@@ -14,9 +14,10 @@ export default function Login() {
 
   // 이미 로그인된 경우 리다이렉트
   if (user) {
+    if (user.mustChangePassword) return <Navigate to="/change-password" replace />;
     const dest =
       user.role === 'admin' ? '/admin' :
-      user.role === 'judge' ? '/admin/score-input' :
+      user.role === 'judge' ? '/admin/scores' :
       '/participant';
     return <Navigate to={dest} replace />;
   }

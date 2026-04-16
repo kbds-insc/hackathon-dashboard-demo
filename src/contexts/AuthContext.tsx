@@ -12,6 +12,7 @@ export interface AuthUser {
   email: string;
   role: UserRole;
   name: string;
+  mustChangePassword: boolean;
 }
 
 interface AuthContextValue {
@@ -29,12 +30,16 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 // ── Provider ─────────────────────────────────────────────────────
 
 function toAuthUser(user: User): AuthUser {
-  const meta = user.user_metadata ?? {};
+  // role: app_metadata 우선 (서버 전용, 위변조 불가), user_metadata 폴백 (레거시 계정 호환)
+  // name, mustChangePassword: user_metadata (사용자/서버 모두 수정 가능)
+  const appMeta = user.app_metadata ?? {};
+  const userMeta = user.user_metadata ?? {};
   return {
     id: user.id,
     email: user.email ?? '',
-    role: (meta.role as UserRole) ?? 'participant',
-    name: (meta.name as string) ?? user.email ?? '',
+    role: ((appMeta.role ?? userMeta.role) as UserRole) ?? 'participant',
+    name: (userMeta.name as string) ?? user.email ?? '',
+    mustChangePassword: (userMeta.must_change_password as boolean) ?? false,
   };
 }
 

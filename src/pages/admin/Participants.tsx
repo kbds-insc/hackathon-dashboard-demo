@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  FileSpreadsheet,
   Lock,
   Pencil,
   Plus,
@@ -10,14 +11,15 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import AdminLayout from '../../components/layout/AdminLayout';
 import Card from '../../components/ui/Card';
 import { useParticipants } from '../../hooks/useParticipants';
 import { useTeams } from '../../hooks/useTeams';
 import {
-  addParticipant,
   addTeam,
   autoMatch,
+  createParticipantWithAuth,
   deleteParticipant,
   deleteTeam,
   toggleTeamLock,
@@ -61,6 +63,8 @@ interface ParticipantDraftRow {
   form: ParticipantFormState;
   errors: Partial<Record<keyof ParticipantFormState, string>>;
   teamLocked: boolean;
+  password?: string;      // 신규 행 전용
+  passwordError?: string; // 신규 행 전용
 }
 
 const EMPTY_PARTICIPANT_FORM: ParticipantFormState = {
@@ -96,8 +100,7 @@ function Toast({ toast, onHide }: { toast: ToastState; onHide: () => void }) {
 
   return (
     <div
-      className="fixed bottom-6 z-[100] rounded-xl bg-gray-800 px-4 py-3 text-sm font-medium text-white shadow-lg"
-      style={{ left: 'calc(50% + 120px)', transform: 'translateX(-50%)' }}
+      className="fixed bottom-6 z-[100] left-1/2 -translate-x-1/2 lg:left-[calc(50%+120px)] rounded-xl bg-gray-800 px-4 py-3 text-sm font-medium text-white shadow-lg"
     >
       {toast.message}
     </div>
@@ -150,7 +153,40 @@ function createDraftRow(index: number): ParticipantDraftRow {
     form: { ...EMPTY_PARTICIPANT_FORM },
     errors: {},
     teamLocked: false,
+    password: '',
   };
+}
+
+const EXCEL_IMPORT_PASSWORD = 'kbdata1';
+
+async function parseExcelFile(
+  file: File,
+  startIndex: number,
+  limit: number
+): Promise<{ rows: ParticipantDraftRow[]; truncated: number }> {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: 'array' });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+
+  const all: ParticipantDraftRow[] = json.map((row, i) => ({
+    key: `import-${startIndex + i}`,
+    mode: 'new',
+    form: {
+      name: String(row['이름'] ?? '').trim(),
+      email: String(row['이메일'] ?? '').trim(),
+      department: String(row['부서'] ?? '').trim(),
+      position: String(row['직급'] ?? '').trim(),
+      team: '',
+      status: 'pending',
+    },
+    errors: {},
+    teamLocked: false,
+    password: EXCEL_IMPORT_PASSWORD,
+  }));
+
+  const truncated = Math.max(0, all.length - limit);
+  return { rows: all.slice(0, limit), truncated };
 }
 
 function validateParticipantDraft(
@@ -216,6 +252,7 @@ export default function Participants() {
   const [newRows, setNewRows] = useState<ParticipantDraftRow[]>([]);
   const [editRows, setEditRows] = useState<Record<string, ParticipantDraftRow>>({});
   const [optimisticParticipants, setOptimisticParticipants] = useState<Participant[]>([]);
+  const [deletedParticipantIds, setDeletedParticipantIds] = useState<Set<string>>(new Set());
   const [optimisticTeams, setOptimisticTeams] = useState<Team[]>([]);
   const [draftCounter, setDraftCounter] = useState(0);
   const [savingParticipants, setSavingParticipants] = useState(false);
@@ -233,12 +270,19 @@ export default function Participants() {
     limitLeader: true,
   });
   const [toast, setToast] = useState<ToastState>({ visible: false, message: '' });
+  const [confirmDialog, setConfirmDialog] = useState<{
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   const displayTeams = useMemo(() => mergeTeams(teams, optimisticTeams), [teams, optimisticTeams]);
 
   const displayParticipants = useMemo(
-    () => mergeParticipants(participants, optimisticParticipants),
-    [participants, optimisticParticipants]
+    () =>
+      mergeParticipants(participants, optimisticParticipants).filter(
+        (p) => !deletedParticipantIds.has(p.id)
+      ),
+    [participants, optimisticParticipants, deletedParticipantIds]
   );
 
   const filteredParticipants = useMemo(() => {
@@ -303,11 +347,45 @@ export default function Participants() {
 
   const hideToast = () => setToast((prev) => ({ ...prev, visible: false }));
 
+  const xlsxInputRef = useRef<HTMLInputElement>(null);
+
   const addParticipantRow = () => {
     if (newRows.length >= MAX_NEW_ROWS) return;
     const nextIndex = draftCounter + 1;
     setDraftCounter(nextIndex);
     setNewRows((prev) => [...prev, createDraftRow(nextIndex)]);
+  };
+
+  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (xlsxInputRef.current) xlsxInputRef.current.value = '';
+    if (!file) return;
+
+    const remaining = MAX_NEW_ROWS - newRows.length;
+    if (remaining <= 0) {
+      setToast({ visible: true, message: `신규 행이 최대(${MAX_NEW_ROWS}개)입니다.` });
+      return;
+    }
+
+    try {
+      const { rows, truncated } = await parseExcelFile(file, draftCounter + 1, remaining);
+      if (rows.length === 0) {
+        setToast({ visible: true, message: '등록할 데이터가 없습니다. 엑셀 형식을 확인해 주세요.' });
+        return;
+      }
+      setDraftCounter((prev) => prev + rows.length);
+      setNewRows((prev) => [...prev, ...rows]);
+      if (truncated > 0) {
+        setToast({
+          visible: true,
+          message: `${rows.length}명 추가됨. ${truncated}명은 최대 행 수(${MAX_NEW_ROWS}개)를 초과하여 제외됐습니다.`,
+        });
+      } else {
+        setToast({ visible: true, message: `${rows.length}명이 드래프트로 추가됐습니다. 내용 확인 후 저장해 주세요.` });
+      }
+    } catch {
+      setToast({ visible: true, message: '엑셀 파일을 읽는 데 실패했습니다.' });
+    }
   };
 
   const startEditParticipant = (participant: Participant) => {
@@ -369,6 +447,16 @@ export default function Participants() {
     });
   };
 
+  const updateDraftPassword = (key: string, value: string) => {
+    setNewRows((prev) =>
+      prev.map((draft) =>
+        draft.key === key
+          ? { ...draft, password: value, passwordError: undefined }
+          : draft
+      )
+    );
+  };
+
   const setDraftErrors = (
     key: string,
     errors: Partial<Record<keyof ParticipantFormState, string>>
@@ -407,6 +495,16 @@ export default function Participants() {
       if (Object.keys(errors).length > 0) hasValidationError = true;
     }
 
+    // 신규 행 비밀번호 검증
+    const updatedNewRows = newRows.map((draft) => {
+      if (!draft.password?.trim()) {
+        hasValidationError = true;
+        return { ...draft, passwordError: '임시 비밀번호를 입력해 주세요.' };
+      }
+      return draft;
+    });
+    setNewRows(updatedNewRows);
+
     if (hasValidationError) {
       setToast({ visible: true, message: '필수 항목과 팀 배정 상태를 확인해 주세요.' });
       return;
@@ -414,6 +512,7 @@ export default function Participants() {
 
     setSavingParticipants(true);
     const failedKeys = new Set<string>();
+    const firstError: string[] = [];
 
     for (const draft of drafts) {
       const payload = {
@@ -427,18 +526,24 @@ export default function Participants() {
 
       try {
         if (draft.mode === 'new') {
-            const createdParticipant = await addParticipant(payload);
+            const createdParticipant = await createParticipantWithAuth(payload, draft.password!);
             setOptimisticParticipants((prev) => [...prev, createdParticipant]);
         } else if (draft.id) {
-          await updateParticipant(draft.id, payload);
-          setOptimisticParticipants((prev) =>
-            prev.map((participant) =>
-              participant.id === draft.id ? { ...participant, ...payload } : participant
-            )
-          );
+          const original = displayParticipants.find((p) => p.id === draft.id);
+          await updateParticipant(draft.id, payload, original?.userId);
+          if (original) {
+            const updated: Participant = { ...original, ...payload };
+            setOptimisticParticipants((prev) => {
+              const exists = prev.some((p) => p.id === draft.id);
+              return exists
+                ? prev.map((p) => (p.id === draft.id ? updated : p))
+                : [...prev, updated];
+            });
+          }
         }
-      } catch {
+      } catch (e: unknown) {
         failedKeys.add(draft.key);
+        if (firstError.length === 0 && e instanceof Error) firstError.push(e.message);
       }
     }
 
@@ -455,13 +560,14 @@ export default function Participants() {
     setEditRows((prev) =>
       Object.fromEntries(Object.entries(prev).filter(([key]) => failedKeys.has(key)))
     );
+    const errDetail = firstError.length > 0 ? ` (${firstError[0]})` : '';
     setToast({
       visible: true,
-      message: `일부 행 저장에 실패했습니다. 실패한 ${failedKeys.size}개 행을 유지했습니다.`,
+      message: `일부 행 저장에 실패했습니다.${errDetail}`,
     });
   };
 
-  const handleDeleteParticipant = async (id: string) => {
+  const handleDeleteParticipant = (id: string) => {
     const participant = displayParticipants.find((item) => item.id === id);
     const team = displayTeams.find((item) => item.id === participant?.team);
     if (team?.locked) {
@@ -469,13 +575,19 @@ export default function Participants() {
       return;
     }
 
-    try {
-      await deleteParticipant(id);
-      cancelDraft(id);
-      setOptimisticParticipants((prev) => prev.filter((participantItem) => participantItem.id !== id));
-    } catch {
-      setToast({ visible: true, message: '참가자 삭제에 실패했습니다.' });
-    }
+    setConfirmDialog({
+      message: `'${participant?.name ?? '참가자'}'를 삭제하시겠습니까?`,
+      onConfirm: async () => {
+        try {
+          await deleteParticipant(id, participant?.userId);
+          cancelDraft(id);
+          setOptimisticParticipants((prev) => prev.filter((p) => p.id !== id));
+          setDeletedParticipantIds((prev) => new Set([...prev, id]));
+        } catch {
+          setToast({ visible: true, message: '참가자 삭제에 실패했습니다.' });
+        }
+      },
+    });
   };
 
   const openTAdd = () => {
@@ -599,13 +711,16 @@ export default function Participants() {
             members: [...tAssignment.selectedParticipantIds],
           },
         ]);
-        setOptimisticParticipants((prev) =>
-          prev.map((participant) =>
-            tAssignment.selectedParticipantIds.includes(participant.id)
-              ? { ...participant, team: createdTeam.id }
-              : participant
-          )
-        );
+        setOptimisticParticipants((prev) => {
+          // prev에 없는 참가자(base 데이터에만 있는)도 업데이트해야 하므로
+          // displayParticipants 기준으로 Map을 구성한 뒤 덮어씀
+          const updated = new Map(prev.map((p) => [p.id, p]));
+          for (const id of tAssignment.selectedParticipantIds) {
+            const base = displayParticipants.find((p) => p.id === id);
+            if (base) updated.set(id, { ...base, team: createdTeam.id });
+          }
+          return Array.from(updated.values());
+        });
       } else if (tModal?.mode === 'edit') {
         const previousMemberIds = displayParticipants
           .filter((participant) => participant.team === tModal.id)
@@ -661,23 +776,64 @@ export default function Participants() {
     }
   };
 
-  const handleDeleteTeam = async (id: string) => {
+  const handleDeleteTeam = (id: string) => {
     const team = teams.find((item) => item.id === id);
     if (team?.locked) {
       setToast({ visible: true, message: '잠금된 팀은 삭제할 수 없습니다.' });
       return;
     }
 
+    setConfirmDialog({
+      message: `'${team?.name ?? '팀'}'을 삭제하시겠습니까?`,
+      onConfirm: async () => {
+        try {
+          await deleteTeam(id);
+        } catch {
+          setToast({ visible: true, message: '팀 삭제에 실패했습니다.' });
+        }
+      },
+    });
+  };
+
+  const handleToggleLock = async (id: string) => {
+    const team = displayTeams.find((t) => t.id === id);
+    if (!team) return;
+    const newLocked = !team.locked;
+
+    // 즉시 UI 반영 (낙관적 업데이트)
+    setOptimisticTeams((prev) => {
+      const exists = prev.some((t) => t.id === id);
+      return exists
+        ? prev.map((t) => (t.id === id ? { ...t, locked: newLocked } : t))
+        : [...prev, { ...team, locked: newLocked }];
+    });
+
     try {
-      await deleteTeam(id);
+      await toggleTeamLock(id, team.locked);
     } catch {
-      setToast({ visible: true, message: '팀 삭제에 실패했습니다.' });
+      // 실패 시 롤백
+      setOptimisticTeams((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, locked: team.locked } : t))
+      );
+      setToast({ visible: true, message: '팀 잠금 상태 변경에 실패했습니다.' });
     }
   };
 
   const handleAutoMatch = async () => {
     try {
       const result = await autoMatch(matchOptions);
+      // 배정 결과를 즉시 UI에 반영
+      if (result.assignments.length > 0) {
+        const assignMap = new Map(result.assignments.map(({ participantId, teamId }) => [participantId, teamId]));
+        setOptimisticParticipants((prev) => {
+          const updated = new Map(prev.map((p) => [p.id, p]));
+          for (const [participantId, teamId] of assignMap) {
+            const base = displayParticipants.find((p) => p.id === participantId);
+            if (base) updated.set(participantId, { ...base, team: teamId });
+          }
+          return Array.from(updated.values());
+        });
+      }
       setToast({
         visible: true,
         message: `${result.matched}명 자동 배정 완료, ${result.unmatched}명 미배정`,
@@ -690,6 +846,32 @@ export default function Participants() {
   return (
     <AdminLayout>
       <Toast toast={toast} onHide={hideToast} />
+
+      {confirmDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setConfirmDialog(null)} />
+          <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <p className="text-sm text-gray-700">{confirmDialog.message}</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmDialog(null)}
+                className="rounded-xl bg-gray-100 px-4 py-2 text-sm text-gray-600 hover:bg-gray-200 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => {
+                  confirmDialog.onConfirm();
+                  setConfirmDialog(null);
+                }}
+                className="rounded-xl bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 transition-colors"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mb-5 flex border-b border-gray-200">
         {(['participants', 'teams'] as Tab[]).map((item) => (
@@ -723,10 +905,13 @@ export default function Participants() {
           onStartEdit={startEditParticipant}
           onDelete={handleDeleteParticipant}
           onDraftChange={updateDraftField}
+          onPasswordChange={updateDraftPassword}
           onCancelDraft={cancelDraft}
           onSaveAll={handleSaveParticipants}
           savingParticipants={savingParticipants}
           openDraftCount={openDraftCount}
+          xlsxInputRef={xlsxInputRef}
+          onImportExcel={handleImportExcel}
         />
       ) : (
         <TeamsTab
@@ -738,9 +923,7 @@ export default function Participants() {
           onAddTeam={openTAdd}
           onEditTeam={openTEdit}
           onDeleteTeam={handleDeleteTeam}
-          onToggleLock={(id) =>
-            toggleTeamLock(id, displayTeams.find((team) => team.id === id)?.locked ?? false)
-          }
+          onToggleLock={handleToggleLock}
         />
       )}
 
@@ -759,16 +942,25 @@ export default function Participants() {
                     : '팀 정보와 팀원 구성을 같은 화면에서 수정합니다.'}
                 </p>
               </div>
-              <button
-                onClick={closeTModal}
-                className="rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleTeamSubmit}
+                  disabled={!tForm.name.trim() || savingTeam}
+                  className="hidden rounded-xl bg-[#80766b] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#6e645a] disabled:cursor-not-allowed disabled:opacity-40 lg:block"
+                >
+                  {savingTeam ? '저장 중...' : tModal.mode === 'add' ? '팀 생성' : '팀 저장'}
+                </button>
+                <button
+                  onClick={closeTModal}
+                  className="rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
             <div className="hidden min-h-0 flex-1 overflow-hidden lg:grid lg:grid-cols-[1.1fr_0.9fr] lg:gap-5">
-              <div className="min-h-0 rounded-2xl border border-gray-200 p-4">
+              <div className="h-full min-h-0 rounded-2xl border border-gray-200 p-4">
                 <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="relative w-full max-w-sm">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -807,7 +999,7 @@ export default function Participants() {
                   </div>
                 </div>
 
-                <div className="h-[420px] overflow-y-auto rounded-xl border border-gray-100">
+                <div className="h-[320px] overflow-y-auto rounded-xl border border-gray-100">
                   <table className="w-full text-sm">
                     <thead className="sticky top-0 bg-gray-50">
                       <tr className="border-b border-gray-100 text-left text-xs font-medium text-gray-400">
@@ -846,7 +1038,7 @@ export default function Participants() {
               </div>
 
               <div className="flex h-full min-h-0 flex-col rounded-2xl border border-gray-200 p-4">
-                <div className="mb-4 rounded-2xl bg-[#80766b]/8 px-4 py-3">
+                <div className="mb-3 rounded-2xl bg-[#80766b]/8 px-4 py-3">
                   <p className="text-xs font-medium text-gray-500">
                     {tModal.mode === 'add' ? '자동 생성 팀 번호' : '현재 팀'}
                   </p>
@@ -879,7 +1071,7 @@ export default function Participants() {
                         onChange={(event) =>
                           setTForm((prev) => ({ ...prev, idea: event.target.value }))
                         }
-                        rows={4}
+                        rows={3}
                         className="w-full resize-none rounded-xl border border-gray-200 px-3 py-2.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[#80766b]/30"
                       />
                     </FormField>
@@ -920,22 +1112,6 @@ export default function Participants() {
                       )}
                     </div>
                   </div>
-                </div>
-
-                <div className="mt-6 flex gap-2 pt-2">
-                  <button
-                    onClick={closeTModal}
-                    className="flex-1 rounded-xl bg-gray-100 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-200"
-                  >
-                    취소
-                  </button>
-                  <button
-                    onClick={handleTeamSubmit}
-                    disabled={!tForm.name.trim() || savingTeam}
-                    className="flex-1 rounded-xl bg-[#80766b] py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#6e645a] disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {savingTeam ? '저장 중...' : tModal.mode === 'add' ? '팀 생성' : '팀 저장'}
-                  </button>
                 </div>
               </div>
             </div>
@@ -1126,10 +1302,13 @@ function ParticipantsTab({
   onStartEdit,
   onDelete,
   onDraftChange,
+  onPasswordChange,
   onCancelDraft,
   onSaveAll,
   savingParticipants,
   openDraftCount,
+  xlsxInputRef,
+  onImportExcel,
 }: {
   filteredParticipants: Participant[];
   search: string;
@@ -1147,10 +1326,13 @@ function ParticipantsTab({
     field: keyof ParticipantFormState,
     value: string
   ) => void;
+  onPasswordChange: (key: string, value: string) => void;
   onCancelDraft: (key: string) => void;
   onSaveAll: () => void;
   savingParticipants: boolean;
   openDraftCount: number;
+  xlsxInputRef: React.RefObject<HTMLInputElement | null>;
+  onImportExcel: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   const editRowMap = useMemo(
     () => Object.fromEntries(visibleEditRows.map((draft) => [draft.id, draft])),
@@ -1191,30 +1373,47 @@ function ParticipantsTab({
             <Plus className="h-4 w-4" />
             참가자 추가
           </button>
+          <input
+            ref={xlsxInputRef}
+            type="file"
+            accept=".xlsx"
+            className="hidden"
+            onChange={onImportExcel}
+          />
+          <button
+            onClick={() => xlsxInputRef.current?.click()}
+            disabled={addDisabled}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-[#80766b] px-3 py-2 text-sm font-medium text-[#80766b] transition-colors hover:bg-[#80766b]/10 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            엑셀 일괄 등록
+          </button>
         </div>
       </div>
 
       <Card>
         <div className="mb-3 flex items-center justify-between gap-3 text-xs text-gray-500">
-          <p>모바일과 PC 모두 동일한 인라인 그리드를 사용하며, 좁은 화면에서는 좌우 스크롤로 확인할 수 있습니다.</p>
+          <p>좌우 스크롤로 전체 내용 확인</p>
           <p className="shrink-0">신규 행 {newRows.length}/{MAX_NEW_ROWS}</p>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-[1120px] table-fixed text-sm">
+          <table className="min-w-[1300px] table-fixed text-sm">
             <colgroup>
-              <col style={{ width: 160 }} />
-              <col style={{ width: 300 }} />
+              <col style={{ width: 150 }} />
+              <col style={{ width: 220 }} />
               <col style={{ width: 180 }} />
-              <col style={{ width: 160 }} />
-              <col style={{ width: 140 }} />
-              <col style={{ width: 140 }} />
-              <col style={{ width: 160 }} />
+              <col style={{ width: 170 }} />
+              <col style={{ width: 150 }} />
+              <col style={{ width: 130 }} />
+              <col style={{ width: 130 }} />
+              <col style={{ width: 170 }} />
             </colgroup>
             <thead>
               <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase tracking-wide text-gray-400">
                 <th className="pb-3 pr-3">이름</th>
                 <th className="pb-3 pr-3">이메일</th>
+                <th className="pb-3 pr-3">임시 비밀번호 <span className="text-red-400">*</span></th>
                 <th className="pb-3 pr-3">팀</th>
                 <th className="pb-3 pr-3">부서</th>
                 <th className="pb-3 pr-3">직급</th>
@@ -1229,6 +1428,7 @@ function ParticipantsTab({
                   draft={draft}
                   teams={teams}
                   onDraftChange={onDraftChange}
+                  onPasswordChange={onPasswordChange}
                   onCancel={onCancelDraft}
                 />
               ))}
@@ -1242,6 +1442,7 @@ function ParticipantsTab({
                       draft={draft}
                       teams={teams}
                       onDraftChange={onDraftChange}
+                      onPasswordChange={onPasswordChange}
                       onCancel={onCancelDraft}
                     />
                   );
@@ -1252,6 +1453,7 @@ function ParticipantsTab({
                   <tr key={participant.id} className="transition-colors hover:bg-gray-50">
                     <td className="py-3 pr-3 font-medium text-gray-800">{participant.name}</td>
                     <td className="truncate py-3 pr-3 text-gray-500">{participant.email}</td>
+                    <td className="py-3 pr-3 text-gray-300">—</td>
                     <td className="py-3 pr-3 text-gray-500">
                       <span className="flex items-center gap-1">
                         {teamName(participant.team)}
@@ -1299,6 +1501,7 @@ function ParticipantEditableRow({
   draft,
   teams,
   onDraftChange,
+  onPasswordChange,
   onCancel,
 }: {
   draft: ParticipantDraftRow;
@@ -1308,6 +1511,7 @@ function ParticipantEditableRow({
     field: keyof ParticipantFormState,
     value: string
   ) => void;
+  onPasswordChange: (key: string, value: string) => void;
   onCancel: (key: string) => void;
 }) {
   return (
@@ -1332,6 +1536,24 @@ function ParticipantEditableRow({
         />
         {draft.errors.email && (
           <p className="mt-1 text-xs text-red-500">{draft.errors.email}</p>
+        )}
+      </td>
+      <td className="py-3 pr-3">
+        {draft.mode === 'new' ? (
+          <>
+            <input
+              type="password"
+              value={draft.password ?? ''}
+              onChange={(event) => onPasswordChange(draft.key, event.target.value)}
+              className={tableInputClass(!!draft.passwordError)}
+              placeholder="임시 비밀번호"
+            />
+            {draft.passwordError && (
+              <p className="mt-1 text-xs text-red-500">{draft.passwordError}</p>
+            )}
+          </>
+        ) : (
+          <span className="text-gray-300">—</span>
         )}
       </td>
       <td className="py-3 pr-3">

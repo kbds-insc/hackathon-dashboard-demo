@@ -5,8 +5,11 @@
 import {
   apiFetchParticipants,
   apiAddParticipant,
+  apiCreateParticipantWithAuth,
   apiUpdateParticipant,
+  apiUpdateParticipantWithAuth,
   apiDeleteParticipant,
+  apiDeleteParticipantWithAuth,
 } from '../api/participants';
 import {
   apiFetchTeams,
@@ -39,6 +42,7 @@ export interface AutoMatchOptions {
 export interface AutoMatchResult {
   matched: number;
   unmatched: number;
+  assignments: { participantId: string; teamId: string }[];
 }
 
 const LEADER_POSITIONS = ['과장', '차장', '부장', '팀장', '수석'];
@@ -49,15 +53,29 @@ export async function addParticipant(data: Omit<Participant, 'id'>): Promise<Par
   return apiAddParticipant(data);
 }
 
-export async function updateParticipant(
-  id: string,
-  partial: Partial<Omit<Participant, 'id'>>
-): Promise<void> {
-  await apiUpdateParticipant(id, partial);
+// auth user + participant 동시 생성 (임시 비밀번호 방식)
+export async function createParticipantWithAuth(
+  data: Omit<Participant, 'id'>,
+  password: string
+): Promise<Participant> {
+  return apiCreateParticipantWithAuth(data, password);
 }
 
-export async function deleteParticipant(id: string): Promise<void> {
-  await apiDeleteParticipant(id);
+// userId가 있으면 Edge Function으로 auth user metadata도 함께 수정
+export async function updateParticipant(
+  id: string,
+  partial: Partial<Omit<Participant, 'id'>>,
+  userId?: string
+): Promise<void> {
+  await apiUpdateParticipantWithAuth(id, userId, partial);
+}
+
+export async function deleteParticipant(id: string, userId?: string): Promise<void> {
+  if (userId) {
+    await apiDeleteParticipantWithAuth(id, userId);
+  } else {
+    await apiDeleteParticipant(id);
+  }
 }
 
 // ── 팀 mutations ──────────────────────────────────────────────
@@ -155,11 +173,14 @@ export async function autoMatch(options: AutoMatchOptions): Promise<AutoMatchRes
   }
 
   // Supabase에 배정 결과 저장
+  // 팀 배정은 RLS 우회를 위해 Edge Function 경유 (service_role)
+  // userId 없이 team_id만 업데이트하므로 userId는 undefined 전달
+  const participantMap = new Map(participants.map((p) => [p.id, p]));
   await Promise.all(
     assigned.map(({ participantId, teamId }) =>
-      apiUpdateParticipant(participantId, { team: teamId })
+      apiUpdateParticipantWithAuth(participantId, participantMap.get(participantId)?.userId, { team: teamId })
     )
   );
 
-  return { matched: assigned.length, unmatched: candidates.length - assigned.length };
+  return { matched: assigned.length, unmatched: candidates.length - assigned.length, assignments: assigned };
 }
