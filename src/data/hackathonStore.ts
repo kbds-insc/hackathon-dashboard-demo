@@ -56,7 +56,7 @@ export async function addParticipant(data: Omit<Participant, 'id'>): Promise<Par
 // auth user + participant 동시 생성 (임시 비밀번호 방식)
 export async function createParticipantWithAuth(
   data: Omit<Participant, 'id'>,
-  password: string
+  password?: string
 ): Promise<Participant> {
   return apiCreateParticipantWithAuth(data, password);
 }
