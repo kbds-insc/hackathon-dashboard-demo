@@ -26,14 +26,15 @@ serve(async (req) => {
 
   // ── 호출자 인증 확인 (admin 역할만 허용) ────────────────────
   // Edge Function URL은 공개되므로 반드시 검증 필요.
-  // app_metadata는 서버(service_role)만 쓸 수 있어 클라이언트 위변조 불가.
-  // user_metadata는 사용자가 직접 수정 가능하므로 역할 검증에 사용 불가.
+  // app_metadata 우선 (서버 전용, 위변조 불가), user_metadata 폴백 (레거시 계정 호환).
+  // 신규 계정은 app_metadata.role 설정 권장 (SQL: raw_app_meta_data || '{"role":"admin"}').
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) return json({ error: 'Unauthorized' }, 401);
 
   const token = authHeader.replace('Bearer ', '');
   const { data: { user: caller }, error: callerError } = await admin.auth.getUser(token);
-  if (callerError || caller?.app_metadata?.role !== 'admin') {
+  const callerRole = caller?.app_metadata?.role ?? caller?.user_metadata?.role;
+  if (callerError || callerRole !== 'admin') {
     return json({ error: 'Forbidden' }, 403);
   }
 
