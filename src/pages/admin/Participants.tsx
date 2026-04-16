@@ -268,6 +268,7 @@ export default function Participants() {
   const [toast, setToast] = useState<ToastState>({ visible: false, message: '' });
   const [confirmDialog, setConfirmDialog] = useState<{
     message: string;
+    confirmLabel?: string;
     onConfirm: () => void;
   } | null>(null);
 
@@ -577,6 +578,7 @@ export default function Participants() {
     }
     setConfirmDialog({
       message: `'${participant.name}'의 비밀번호를 초기화 하시겠습니까?`,
+      confirmLabel: '초기화',
       onConfirm: async () => {
         try {
           await apiResetParticipantPassword(participant.userId!);
@@ -865,7 +867,7 @@ export default function Participants() {
                 }}
                 className="rounded-xl bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 transition-colors"
               >
-                삭제
+                {confirmDialog.confirmLabel ?? '삭제'}
               </button>
             </div>
           </div>
