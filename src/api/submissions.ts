@@ -63,14 +63,17 @@ export async function apiUpsertSubmission(
   teamId: string,
   payload: { githubUrl: string; slidesUrl: string; description: string }
 ): Promise<void> {
-  // SECURITY DEFINER 함수로 RLS 우회:
-  // - submissions upsert + teams.submit_status = 'submitted' 를 원자적으로 처리
-  // - auth.uid() 조건으로 본인이 소속된 팀만 허용
-  const { error } = await supabase.rpc('submit_team_result', {
-    p_team_id: teamId,
-    p_github_url: payload.githubUrl,
-    p_slides_url: payload.slidesUrl,
-    p_description: payload.description,
-  });
+  const { error } = await supabase
+    .from('submissions')
+    .upsert(
+      {
+        team_id: teamId,
+        github_url: payload.githubUrl,
+        slides_url: payload.slidesUrl,
+        description: payload.description,
+        submitted_at: new Date().toISOString(),
+      },
+      { onConflict: 'team_id' }
+    );
   if (error) throw error;
 }

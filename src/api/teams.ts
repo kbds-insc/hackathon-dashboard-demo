@@ -9,12 +9,16 @@ export interface TeamRow {
 }
 
 export async function apiFetchTeams(): Promise<TeamRow[]> {
-  const { data, error } = await supabase
-    .from('teams')
-    .select('*')
-    .order('created_at', { ascending: true });
+  const [{ data, error }, { data: subsData }] = await Promise.all([
+    supabase.from('teams').select('*').order('created_at', { ascending: true }),
+    supabase.from('submissions').select('team_id'),
+  ]);
   if (error) throw error;
-  return (data ?? []) as TeamRow[];
+  const submittedIds = new Set((subsData ?? []).map((s: { team_id: string }) => s.team_id));
+  return (data ?? []).map((t) => ({
+    ...(t as TeamRow),
+    submit_status: submittedIds.has((t as TeamRow).id) ? 'submitted' : 'not-submitted',
+  }));
 }
 
 export async function apiAddTeam(data: { name: string; idea: string }): Promise<TeamRow> {
@@ -41,11 +45,13 @@ export async function apiDeleteTeam(id: string): Promise<void> {
 }
 
 export async function apiFetchTeamById(id: string): Promise<TeamRow | null> {
-  const { data, error } = await supabase
-    .from('teams')
-    .select('*')
-    .eq('id', id)
-    .single();
+  const [{ data, error }, { data: subData }] = await Promise.all([
+    supabase.from('teams').select('*').eq('id', id).single(),
+    supabase.from('submissions').select('team_id').eq('team_id', id).maybeSingle(),
+  ]);
   if (error) return null;
-  return data as TeamRow;
+  return {
+    ...(data as TeamRow),
+    submit_status: subData ? 'submitted' : 'not-submitted',
+  };
 }
