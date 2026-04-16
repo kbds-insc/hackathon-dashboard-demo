@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  FileSpreadsheet,
   Lock,
   Pencil,
   Plus,
@@ -10,6 +11,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import AdminLayout from '../../components/layout/AdminLayout';
 import Card from '../../components/ui/Card';
 import { useParticipants } from '../../hooks/useParticipants';
@@ -153,6 +155,38 @@ function createDraftRow(index: number): ParticipantDraftRow {
     teamLocked: false,
     password: '',
   };
+}
+
+const EXCEL_IMPORT_PASSWORD = 'kbdata1';
+
+async function parseExcelFile(
+  file: File,
+  startIndex: number,
+  limit: number
+): Promise<{ rows: ParticipantDraftRow[]; truncated: number }> {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: 'array' });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+
+  const all: ParticipantDraftRow[] = json.map((row, i) => ({
+    key: `import-${startIndex + i}`,
+    mode: 'new',
+    form: {
+      name: String(row['이름'] ?? '').trim(),
+      email: String(row['이메일'] ?? '').trim(),
+      department: String(row['부서'] ?? '').trim(),
+      position: String(row['직급'] ?? '').trim(),
+      team: '',
+      status: 'pending',
+    },
+    errors: {},
+    teamLocked: false,
+    password: EXCEL_IMPORT_PASSWORD,
+  }));
+
+  const truncated = Math.max(0, all.length - limit);
+  return { rows: all.slice(0, limit), truncated };
 }
 
 function validateParticipantDraft(
@@ -313,11 +347,45 @@ export default function Participants() {
 
   const hideToast = () => setToast((prev) => ({ ...prev, visible: false }));
 
+  const xlsxInputRef = useRef<HTMLInputElement>(null);
+
   const addParticipantRow = () => {
     if (newRows.length >= MAX_NEW_ROWS) return;
     const nextIndex = draftCounter + 1;
     setDraftCounter(nextIndex);
     setNewRows((prev) => [...prev, createDraftRow(nextIndex)]);
+  };
+
+  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (xlsxInputRef.current) xlsxInputRef.current.value = '';
+    if (!file) return;
+
+    const remaining = MAX_NEW_ROWS - newRows.length;
+    if (remaining <= 0) {
+      setToast({ visible: true, message: `신규 행이 최대(${MAX_NEW_ROWS}개)입니다.` });
+      return;
+    }
+
+    try {
+      const { rows, truncated } = await parseExcelFile(file, draftCounter + 1, remaining);
+      if (rows.length === 0) {
+        setToast({ visible: true, message: '등록할 데이터가 없습니다. 엑셀 형식을 확인해 주세요.' });
+        return;
+      }
+      setDraftCounter((prev) => prev + rows.length);
+      setNewRows((prev) => [...prev, ...rows]);
+      if (truncated > 0) {
+        setToast({
+          visible: true,
+          message: `${rows.length}명 추가됨. ${truncated}명은 최대 행 수(${MAX_NEW_ROWS}개)를 초과하여 제외됐습니다.`,
+        });
+      } else {
+        setToast({ visible: true, message: `${rows.length}명이 드래프트로 추가됐습니다. 내용 확인 후 저장해 주세요.` });
+      }
+    } catch {
+      setToast({ visible: true, message: '엑셀 파일을 읽는 데 실패했습니다.' });
+    }
   };
 
   const startEditParticipant = (participant: Participant) => {
@@ -842,6 +910,8 @@ export default function Participants() {
           onSaveAll={handleSaveParticipants}
           savingParticipants={savingParticipants}
           openDraftCount={openDraftCount}
+          xlsxInputRef={xlsxInputRef}
+          onImportExcel={handleImportExcel}
         />
       ) : (
         <TeamsTab
@@ -1237,6 +1307,8 @@ function ParticipantsTab({
   onSaveAll,
   savingParticipants,
   openDraftCount,
+  xlsxInputRef,
+  onImportExcel,
 }: {
   filteredParticipants: Participant[];
   search: string;
@@ -1259,6 +1331,8 @@ function ParticipantsTab({
   onSaveAll: () => void;
   savingParticipants: boolean;
   openDraftCount: number;
+  xlsxInputRef: React.RefObject<HTMLInputElement | null>;
+  onImportExcel: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   const editRowMap = useMemo(
     () => Object.fromEntries(visibleEditRows.map((draft) => [draft.id, draft])),
@@ -1298,6 +1372,21 @@ function ParticipantsTab({
           >
             <Plus className="h-4 w-4" />
             참가자 추가
+          </button>
+          <input
+            ref={xlsxInputRef}
+            type="file"
+            accept=".xlsx"
+            className="hidden"
+            onChange={onImportExcel}
+          />
+          <button
+            onClick={() => xlsxInputRef.current?.click()}
+            disabled={addDisabled}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-[#80766b] px-3 py-2 text-sm font-medium text-[#80766b] transition-colors hover:bg-[#80766b]/10 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            엑셀 일괄 등록
           </button>
         </div>
       </div>
