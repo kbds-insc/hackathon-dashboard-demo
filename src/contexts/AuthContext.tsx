@@ -30,13 +30,16 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 // ── Provider ─────────────────────────────────────────────────────
 
 function toAuthUser(user: User): AuthUser {
-  const meta = user.user_metadata ?? {};
+  // role: app_metadata (서버 전용 — 클라이언트가 수정 불가, 위변조 방지)
+  // name, mustChangePassword: user_metadata (사용자/서버 모두 수정 가능)
+  const appMeta = user.app_metadata ?? {};
+  const userMeta = user.user_metadata ?? {};
   return {
     id: user.id,
     email: user.email ?? '',
-    role: (meta.role as UserRole) ?? 'participant',
-    name: (meta.name as string) ?? user.email ?? '',
-    mustChangePassword: (meta.must_change_password as boolean) ?? false,
+    role: (appMeta.role as UserRole) ?? 'participant',
+    name: (userMeta.name as string) ?? user.email ?? '',
+    mustChangePassword: (userMeta.must_change_password as boolean) ?? false,
   };
 }
 

@@ -17,25 +17,25 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
-  // ── 호출자 인증 확인 (admin 역할만 허용) ────────────────────
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader) return json({ error: 'Unauthorized' }, 401);
-
-  const callerClient = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-    { global: { headers: { Authorization: authHeader } } },
-  );
-  const { data: { user: caller } } = await callerClient.auth.getUser();
-  if (caller?.user_metadata?.role !== 'admin') {
-    return json({ error: 'Forbidden' }, 403);
-  }
-
   // ── service_role 클라이언트 (DB 직접 조작 권한) ─────────────
+  // 이 클라이언트로 JWT 검증도 함께 처리 — anon 클라이언트 불필요
   const admin = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
   );
+
+  // ── 호출자 인증 확인 (admin 역할만 허용) ────────────────────
+  // Edge Function URL은 공개되므로 반드시 검증 필요.
+  // app_metadata는 서버(service_role)만 쓸 수 있어 클라이언트 위변조 불가.
+  // user_metadata는 사용자가 직접 수정 가능하므로 역할 검증에 사용 불가.
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) return json({ error: 'Unauthorized' }, 401);
+
+  const token = authHeader.replace('Bearer ', '');
+  const { data: { user: caller }, error: callerError } = await admin.auth.getUser(token);
+  if (callerError || caller?.app_metadata?.role !== 'admin') {
+    return json({ error: 'Forbidden' }, 403);
+  }
 
   const body = await req.json();
   const { action } = body;
@@ -49,7 +49,8 @@ serve(async (req) => {
       email,
       password,
       email_confirm: true,                          // 이메일 확인 생략
-      user_metadata: { role: 'participant', name, must_change_password: true },
+      app_metadata: { role: 'participant' },        // 서버 전용 — 클라이언트 수정 불가
+      user_metadata: { name, must_change_password: true },
     });
     if (authError) return json({ error: authError.message }, 400);
 
