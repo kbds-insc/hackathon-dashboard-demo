@@ -158,5 +158,25 @@ Deno.serve(async (req: Request) => {
     return json({ success: true });
   }
 
+  // ── 비밀번호 초기화 ────────────────────────────────────────────
+  if (action === "reset-password") {
+    const { user_id } = body;
+    if (!user_id) return json({ error: "user_id가 필요합니다." }, 400);
+
+    const defaultPassword = Deno.env.get("IMPORT_DEFAULT_PASSWORD");
+    if (!defaultPassword) return json({ error: "IMPORT_DEFAULT_PASSWORD 환경변수가 설정되지 않았습니다." }, 500);
+
+    const { error: authError } = await admin.auth.admin.updateUserById(
+      user_id as string,
+      {
+        password: defaultPassword,
+        user_metadata: { must_change_password: true },
+      }
+    );
+    if (authError) return json({ error: authError.message }, 400);
+
+    return json({ success: true });
+  }
+
   return json({ error: "Unknown action" }, 400);
 });

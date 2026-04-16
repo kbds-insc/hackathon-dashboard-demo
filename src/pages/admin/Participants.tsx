@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileSpreadsheet,
+  KeyRound,
   Lock,
   Pencil,
   Plus,
@@ -27,6 +28,7 @@ import {
   updateTeam,
 } from '../../data/hackathonStore';
 import type { AutoMatchOptions, Team } from '../../data/hackathonStore';
+import { apiResetParticipantPassword } from '../../api/participants';
 import type { Participant } from '../../data/mockData';
 
 type Tab = 'participants' | 'teams';
@@ -567,6 +569,26 @@ export default function Participants() {
     });
   };
 
+  const handleResetPassword = (id: string) => {
+    const participant = displayParticipants.find((p) => p.id === id);
+    if (!participant?.userId) {
+      setToast({ visible: true, message: '연결된 계정이 없어 비밀번호를 초기화할 수 없습니다.' });
+      return;
+    }
+    setConfirmDialog({
+      message: `'${participant.name}'의 비밀번호를 초기화 하시겠습니까?`,
+      onConfirm: async () => {
+        try {
+          await apiResetParticipantPassword(participant.userId!);
+          setToast({ visible: true, message: `'${participant.name}'의 비밀번호가 초기화됐습니다.` });
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : '';
+          setToast({ visible: true, message: `비밀번호 초기화에 실패했습니다.${msg ? ` (${msg})` : ''}` });
+        }
+      },
+    });
+  };
+
   const openTAdd = () => {
     setTForm({ name: getNextTeamLabel(displayTeams), idea: '' });
     setTErrors({});
@@ -881,8 +903,8 @@ export default function Participants() {
           onAddRow={addParticipantRow}
           onStartEdit={startEditParticipant}
           onDelete={handleDeleteParticipant}
+          onResetPassword={handleResetPassword}
           onDraftChange={updateDraftField}
-
           onCancelDraft={cancelDraft}
           onSaveAll={handleSaveParticipants}
           savingParticipants={savingParticipants}
@@ -1278,6 +1300,7 @@ function ParticipantsTab({
   onAddRow,
   onStartEdit,
   onDelete,
+  onResetPassword,
   onDraftChange,
   onCancelDraft,
   onSaveAll,
@@ -1297,6 +1320,7 @@ function ParticipantsTab({
   onAddRow: () => void;
   onStartEdit: (participant: Participant) => void;
   onDelete: (id: string) => void;
+  onResetPassword: (id: string) => void;
   onDraftChange: (
     key: string,
     field: keyof ParticipantFormState,
@@ -1441,6 +1465,14 @@ function ParticipantsTab({
                           title="수정"
                         >
                           <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => onResetPassword(participant.id)}
+                          disabled={!participant.userId}
+                          className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-30"
+                          title={participant.userId ? '비밀번호 초기화' : '연결된 계정 없음'}
+                        >
+                          <KeyRound className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => onDelete(participant.id)}

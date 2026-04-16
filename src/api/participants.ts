@@ -180,6 +180,16 @@ export async function apiFetchParticipantByUserId(userId: string): Promise<Parti
   return fromDB(data as DBParticipant);
 }
 
+// 비밀번호 초기화 (IMPORT_DEFAULT_PASSWORD + must_change_password 플래그)
+export async function apiResetParticipantPassword(userId: string): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('participant-admin', {
+    body: { action: 'reset-password', user_id: userId },
+    headers: await edgeFnHeaders(),
+  });
+  if (error) await throwFromInvokeError(error);
+  if (data?.error) throw new Error(data.error);
+}
+
 // 레거시 참가자에 user_id 연결
 export async function apiLinkParticipant(participantId: string, userId: string): Promise<void> {
   const { error } = await supabase
