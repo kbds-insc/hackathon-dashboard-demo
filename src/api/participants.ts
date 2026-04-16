@@ -98,33 +98,29 @@ export async function apiUpdateParticipant(
   if (error) throw error;
 }
 
-// Edge Function으로 participant + auth user metadata 동시 수정 (auth 연결된 참가자)
-// userId 없으면 participants 테이블만 직접 업데이트
+// Edge Function으로 participant 수정 (service_role → RLS 우회)
+// userId가 있으면 auth user metadata도 함께 동기화
 export async function apiUpdateParticipantWithAuth(
   participantId: string,
   userId: string | undefined,
   partial: Partial<Omit<Participant, 'id'>>
 ): Promise<void> {
-  if (userId) {
-    const body: Record<string, unknown> = {
-      action: 'update',
-      participant_id: participantId,
-      user_id: userId,
-    };
-    if ('name' in partial) body.name = partial.name;
-    if ('team' in partial) body.team_id = partial.team || null;
-    if ('department' in partial) body.department = partial.department;
-    if ('position' in partial) body.position = partial.position;
-    if ('status' in partial) body.status = partial.status;
-    const { data, error } = await supabase.functions.invoke('participant-admin', {
-      body,
-      headers: await edgeFnHeaders(),
-    });
-    if (error) throw error;
-    if (data?.error) throw new Error(data.error);
-  } else {
-    await apiUpdateParticipant(participantId, partial);
-  }
+  const body: Record<string, unknown> = {
+    action: 'update',
+    participant_id: participantId,
+  };
+  if (userId !== undefined) body.user_id = userId;
+  if ('name' in partial) body.name = partial.name;
+  if ('team' in partial) body.team_id = partial.team || null;
+  if ('department' in partial) body.department = partial.department;
+  if ('position' in partial) body.position = partial.position;
+  if ('status' in partial) body.status = partial.status;
+  const { data, error } = await supabase.functions.invoke('participant-admin', {
+    body,
+    headers: await edgeFnHeaders(),
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
 }
 
 export async function apiDeleteParticipant(id: string): Promise<void> {

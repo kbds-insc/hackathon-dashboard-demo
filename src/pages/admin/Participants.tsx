@@ -218,6 +218,7 @@ export default function Participants() {
   const [newRows, setNewRows] = useState<ParticipantDraftRow[]>([]);
   const [editRows, setEditRows] = useState<Record<string, ParticipantDraftRow>>({});
   const [optimisticParticipants, setOptimisticParticipants] = useState<Participant[]>([]);
+  const [deletedParticipantIds, setDeletedParticipantIds] = useState<Set<string>>(new Set());
   const [optimisticTeams, setOptimisticTeams] = useState<Team[]>([]);
   const [draftCounter, setDraftCounter] = useState(0);
   const [savingParticipants, setSavingParticipants] = useState(false);
@@ -239,8 +240,11 @@ export default function Participants() {
   const displayTeams = useMemo(() => mergeTeams(teams, optimisticTeams), [teams, optimisticTeams]);
 
   const displayParticipants = useMemo(
-    () => mergeParticipants(participants, optimisticParticipants),
-    [participants, optimisticParticipants]
+    () =>
+      mergeParticipants(participants, optimisticParticipants).filter(
+        (p) => !deletedParticipantIds.has(p.id)
+      ),
+    [participants, optimisticParticipants, deletedParticipantIds]
   );
 
   const filteredParticipants = useMemo(() => {
@@ -499,7 +503,8 @@ export default function Participants() {
     try {
       await deleteParticipant(id, participant?.userId);
       cancelDraft(id);
-      setOptimisticParticipants((prev) => prev.filter((participantItem) => participantItem.id !== id));
+      setOptimisticParticipants((prev) => prev.filter((p) => p.id !== id));
+      setDeletedParticipantIds((prev) => new Set([...prev, id]));
     } catch {
       setToast({ visible: true, message: '참가자 삭제에 실패했습니다.' });
     }
