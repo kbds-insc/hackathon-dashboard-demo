@@ -40,6 +40,12 @@ export default function ChangePassword() {
       return;
     }
 
+    // 참가자가 최초 비밀번호 변경 완료 시 status=대기 → status=승인 자동 전환
+    // SECURITY DEFINER 함수로 RLS 우회 + auth.uid() 조건으로 자기 행만 업데이트
+    if (user?.role === 'participant') {
+      await supabase.rpc('approve_participant_on_first_login');
+    }
+
     const dest =
       user?.role === 'admin' ? '/admin' :
       user?.role === 'judge' ? '/admin/scores' :
