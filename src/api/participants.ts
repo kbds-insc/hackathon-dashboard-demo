@@ -10,6 +10,19 @@ async function edgeFnHeaders(): Promise<{ Authorization: string }> {
   return { Authorization: `Bearer ${session.access_token}` };
 }
 
+// FunctionsHttpError (4xx) 응답 body의 실제 에러 메시지를 추출해 throw
+async function throwFromInvokeError(error: unknown): Promise<never> {
+  if (error && typeof error === 'object' && 'context' in error) {
+    try {
+      const body = await (error as { context: Response }).context.json() as { error?: string };
+      if (body.error) throw new Error(body.error);
+    } catch (inner) {
+      if (inner instanceof Error && inner.message) throw inner;
+    }
+  }
+  throw error as Error;
+}
+
 interface DBParticipant {
   id: string;
   user_id: string | null;
@@ -78,7 +91,7 @@ export async function apiCreateParticipantWithAuth(
     },
     headers: await edgeFnHeaders(),
   });
-  if (error) throw error;
+  if (error) await throwFromInvokeError(error);
   if (data?.error) throw new Error(data.error);
   return fromDB(data.participant as DBParticipant);
 }
@@ -119,7 +132,7 @@ export async function apiUpdateParticipantWithAuth(
     body,
     headers: await edgeFnHeaders(),
   });
-  if (error) throw error;
+  if (error) await throwFromInvokeError(error);
   if (data?.error) throw new Error(data.error);
 }
 
@@ -141,7 +154,7 @@ export async function apiDeleteParticipantWithAuth(
     },
     headers: await edgeFnHeaders(),
   });
-  if (error) throw error;
+  if (error) await throwFromInvokeError(error);
   if (data?.error) throw new Error(data.error);
 }
 

@@ -115,13 +115,16 @@ Deno.serve(async (req: Request) => {
 
     if (dbError) return json({ error: dbError.message }, 400);
 
-    // 2. auth user 이름 동기화 (이름 변경 시)
+    // 2. auth user 이름 동기화 (이름 변경 시) — DB 업데이트 성공 후 진행, 실패해도 non-fatal
     if (user_id && name !== undefined) {
       const { error: authError } = await admin.auth.admin.updateUserById(
         user_id as string,
         { user_metadata: { name } }
       );
-      if (authError) return json({ error: authError.message }, 400);
+      if (authError) {
+        // auth 동기화 실패는 치명적이지 않음 — DB는 이미 정상 업데이트됨
+        console.warn("auth metadata sync failed (non-fatal):", authError.message);
+      }
     }
 
     return json({ success: true });

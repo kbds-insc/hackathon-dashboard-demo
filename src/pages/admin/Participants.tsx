@@ -440,6 +440,7 @@ export default function Participants() {
 
     setSavingParticipants(true);
     const failedKeys = new Set<string>();
+    const firstError: string[] = [];
 
     for (const draft of drafts) {
       const payload = {
@@ -468,8 +469,9 @@ export default function Participants() {
             });
           }
         }
-      } catch {
+      } catch (e: unknown) {
         failedKeys.add(draft.key);
+        if (firstError.length === 0 && e instanceof Error) firstError.push(e.message);
       }
     }
 
@@ -486,9 +488,10 @@ export default function Participants() {
     setEditRows((prev) =>
       Object.fromEntries(Object.entries(prev).filter(([key]) => failedKeys.has(key)))
     );
+    const errDetail = firstError.length > 0 ? ` (${firstError[0]})` : '';
     setToast({
       visible: true,
-      message: `일부 행 저장에 실패했습니다. 실패한 ${failedKeys.size}개 행을 유지했습니다.`,
+      message: `일부 행 저장에 실패했습니다.${errDetail}`,
     });
   };
 
