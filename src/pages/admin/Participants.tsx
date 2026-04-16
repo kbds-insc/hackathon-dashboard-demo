@@ -724,6 +724,30 @@ export default function Participants() {
     });
   };
 
+  const handleToggleLock = async (id: string) => {
+    const team = displayTeams.find((t) => t.id === id);
+    if (!team) return;
+    const newLocked = !team.locked;
+
+    // 즉시 UI 반영 (낙관적 업데이트)
+    setOptimisticTeams((prev) => {
+      const exists = prev.some((t) => t.id === id);
+      return exists
+        ? prev.map((t) => (t.id === id ? { ...t, locked: newLocked } : t))
+        : [...prev, { ...team, locked: newLocked }];
+    });
+
+    try {
+      await toggleTeamLock(id, team.locked);
+    } catch {
+      // 실패 시 롤백
+      setOptimisticTeams((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, locked: team.locked } : t))
+      );
+      setToast({ visible: true, message: '팀 잠금 상태 변경에 실패했습니다.' });
+    }
+  };
+
   const handleAutoMatch = async () => {
     try {
       const result = await autoMatch(matchOptions);
@@ -814,9 +838,7 @@ export default function Participants() {
           onAddTeam={openTAdd}
           onEditTeam={openTEdit}
           onDeleteTeam={handleDeleteTeam}
-          onToggleLock={(id) =>
-            toggleTeamLock(id, displayTeams.find((team) => team.id === id)?.locked ?? false)
-          }
+          onToggleLock={handleToggleLock}
         />
       )}
 
