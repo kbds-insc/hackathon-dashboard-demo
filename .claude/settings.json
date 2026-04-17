@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /home/user/hackathon-dashboard-demo && npm run lint 2>&1 || true",
+            "statusMessage": "lint 실행 중..."
+          }
+        ]
+      }
+    ]
+  }
+}
