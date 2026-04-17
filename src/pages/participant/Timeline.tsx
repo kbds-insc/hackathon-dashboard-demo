@@ -1,6 +1,7 @@
+import { useEffect } from 'react';
 import ParticipantLayout from '../../components/layout/ParticipantLayout';
 import Card from '../../components/ui/Card';
-import { useMilestones } from '../../hooks/useMilestones';
+import { useMilestonesNotification } from '../../contexts/MilestonesNotification';
 import { CheckCircle2, Circle, Loader2 } from 'lucide-react';
 
 function getDday(dateStr: string): number {
@@ -18,8 +19,12 @@ function formatDday(days: number): string {
 }
 
 export default function Timeline() {
-  const { data: allMilestones } = useMilestones();
+  const { milestones: allMilestones, markAsSeen } = useMilestonesNotification();
   const milestones = allMilestones.filter((m) => m.isPublic);
+
+  useEffect(() => {
+    markAsSeen();
+  }, [markAsSeen]);
 
   const doneMilestones = milestones.filter((m) => m.isDone);
   const progress = milestones.length > 0
