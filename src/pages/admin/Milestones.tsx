@@ -24,7 +24,7 @@ interface ConfirmDialog {
 }
 
 export default function Milestones() {
-  const milestones = useMilestones();
+  const { data: milestones, refetch } = useMilestones();
 
   const [showForm, setShowForm] = useState(false);
   const [editTarget, setEditTarget] = useState<Milestone | null>(null);
@@ -85,6 +85,7 @@ export default function Milestones() {
         });
         showToast('마일스톤이 추가됐습니다.');
       }
+      refetch();
       closeForm();
     } catch {
       showToast('저장에 실패했습니다.');
@@ -100,6 +101,7 @@ export default function Milestones() {
         setConfirmDialog(null);
         try {
           await apiDeleteMilestone(m.id);
+          refetch();
           showToast('마일스톤이 삭제됐습니다.');
         } catch {
           showToast('삭제에 실패했습니다.');

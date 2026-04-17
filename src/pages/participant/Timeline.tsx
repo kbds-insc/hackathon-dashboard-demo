@@ -18,7 +18,7 @@ function formatDday(days: number): string {
 }
 
 export default function Timeline() {
-  const allMilestones = useMilestones();
+  const { data: allMilestones } = useMilestones();
   const milestones = allMilestones.filter((m) => m.isPublic);
 
   const doneMilestones = milestones.filter((m) => m.isDone);

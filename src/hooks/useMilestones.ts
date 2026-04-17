@@ -1,23 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { apiFetchMilestones } from '../api/milestones';
 import type { Milestone } from '../data/mockData';
 
-export function useMilestones(): Milestone[] {
-  const [milestones, setMilestones] = useState<Milestone[]>([]);
+export function useMilestones() {
+  const [data, setData] = useState<Milestone[]>([]);
+
+  const load = useCallback(() => {
+    apiFetchMilestones().then(setData).catch(console.error);
+  }, []);
 
   useEffect(() => {
-    apiFetchMilestones().then(setMilestones).catch(console.error);
+    load();
 
     const channel = supabase
       .channel('hook-milestones')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'milestones' }, () => {
-        apiFetchMilestones().then(setMilestones).catch(console.error);
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'milestones' }, load)
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [load]);
 
-  return milestones;
+  return { data, refetch: load };
 }
