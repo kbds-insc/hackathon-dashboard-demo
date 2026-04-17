@@ -5,7 +5,6 @@ interface DBMilestone {
   id: string;
   title: string;
   date: string;
-  completed: boolean;
   description: string | null;
   is_public: boolean;
 }
