@@ -40,20 +40,16 @@ export async function apiFetchMilestones(): Promise<Milestone[]> {
 
 export async function apiAddMilestone(
   payload: Pick<Milestone, 'title' | 'date'> & { description?: string; isPublic: boolean }
-): Promise<Milestone> {
-  const { data, error } = await supabase
+): Promise<void> {
+  const { error } = await supabase
     .from('milestones')
     .insert({
       title: payload.title,
       date: payload.date,
       description: payload.description || null,
       is_public: payload.isPublic,
-      completed: false,
-    })
-    .select()
-    .single();
+    });
   if (error) throw error;
-  return fromDB(data as DBMilestone);
 }
 
 export async function apiUpdateMilestone(
