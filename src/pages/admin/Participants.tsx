@@ -315,7 +315,7 @@ export default function Participants() {
 
   const filteredParticipants = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return displayParticipants.filter((participant) => {
+    const filtered = displayParticipants.filter((participant) => {
       if (!query) return true;
       return (
         participant.name.toLowerCase().includes(query) ||
@@ -324,7 +324,26 @@ export default function Participants() {
         participant.position.toLowerCase().includes(query)
       );
     });
-  }, [displayParticipants, search]);
+
+    return filtered.sort((a, b) => {
+      // 1. 팀 없음은 마지막
+      if (!a.team && b.team) return 1;
+      if (a.team && !b.team) return -1;
+
+      // 2. 팀 이름 오름차순
+      const teamNameA = displayTeams.find((t) => t.id === a.team)?.name ?? '';
+      const teamNameB = displayTeams.find((t) => t.id === b.team)?.name ?? '';
+      const teamCmp = teamNameA.localeCompare(teamNameB, 'ko');
+      if (teamCmp !== 0) return teamCmp;
+
+      // 3. 팀장 우선
+      if (a.isLeader && !b.isLeader) return -1;
+      if (!a.isLeader && b.isLeader) return 1;
+
+      // 4. 이름 오름차순
+      return a.name.localeCompare(b.name, 'ko');
+    });
+  }, [displayParticipants, displayTeams, search]);
 
   const teamAddCandidates = useMemo(
     () =>
