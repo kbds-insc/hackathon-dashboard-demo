@@ -4,7 +4,7 @@ import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import { useParticipants } from '../../hooks/useParticipants';
 import { useCurrentParticipant } from '../../hooks/useCurrentParticipant';
-import { CheckCircle2, Clock, Crown, Plus, X } from 'lucide-react';
+import { CheckCircle2, Clock, Crown, Lock, Plus, X } from 'lucide-react';
 import { createParticipantWithAuth } from '../../data/hackathonStore';
 
 function Initials({ name }: { name: string }) {
@@ -29,11 +29,13 @@ export default function ParticipantDashboard() {
   const { participant, team, loading } = useCurrentParticipant();
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showLockAlert, setShowLockAlert] = useState(false);
   const [form, setForm] = useState<AddMemberForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const isLeader = participant?.isLeader ?? false;
+  const isLocked = team?.locked ?? false;
 
   const myMembers = team
     ? participants.filter((p) => p.team === team.id)
@@ -109,10 +111,15 @@ export default function ParticipantDashboard() {
         headerRight={
           isLeader ? (
             <button
-              onClick={openAddModal}
-              className="flex items-center gap-1 text-xs font-medium text-[#80766b] hover:text-[#6e645a]"
+              onClick={isLocked ? () => setShowLockAlert(true) : openAddModal}
+              disabled={false}
+              className={`flex items-center gap-1 text-xs font-medium ${
+                isLocked
+                  ? 'text-gray-400 cursor-not-allowed'
+                  : 'text-[#80766b] hover:text-[#6e645a]'
+              }`}
             >
-              <Plus className="w-3.5 h-3.5" />
+              {isLocked ? <Lock className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
               팀원 추가
             </button>
           ) : undefined
@@ -174,6 +181,29 @@ export default function ParticipantDashboard() {
           </div>
         </div>
       </Card>
+
+      {/* ── 팀 잠금 알림 팝업 ── */}
+      {showLockAlert && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <div className="flex items-center gap-3 mb-4">
+              <Lock className="w-5 h-5 text-gray-500 shrink-0" />
+              <h2 className="text-base font-semibold text-gray-800">팀 잠금</h2>
+            </div>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              잠금된 팀에는 팀원을 추가할 수 없습니다. 관리자에게 문의하세요.
+            </p>
+            <div className="mt-5 flex justify-end">
+              <button
+                onClick={() => setShowLockAlert(false)}
+                className="rounded-lg bg-[#80766b] px-4 py-2 text-sm font-medium text-white hover:bg-[#6e645a]"
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── 팀원 추가 모달 (팀장 전용) ── */}
       {showAddModal && (

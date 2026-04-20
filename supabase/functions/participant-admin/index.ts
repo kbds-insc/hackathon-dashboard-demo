@@ -90,6 +90,16 @@ Deno.serve(async (req: Request) => {
         return json({ error: "팀에 소속되지 않은 팀장입니다." }, 400);
       }
 
+      // 팀 잠금 여부 확인
+      const { data: teamRow } = await admin
+        .from("teams")
+        .select("locked")
+        .eq("id", leaderRow.team_id)
+        .single();
+      if (teamRow?.locked) {
+        return json({ error: "잠금된 팀에는 팀원을 추가할 수 없습니다. 관리자에게 문의하세요." }, 403);
+      }
+
       // 팀장은 자신의 팀에만 추가 가능, is_leader·status 강제 고정
       resolvedTeamId = leaderRow.team_id;
       resolvedIsLeader = false;
