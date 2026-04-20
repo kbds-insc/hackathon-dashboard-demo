@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.49.1";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": "https://your-domain.com", // prd 도메인으로 변경
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
@@ -41,10 +41,9 @@ Deno.serve(async (req: Request) => {
   const { data: userData, error: userError } = await callerClient.auth.getUser();
   if (userError || !userData?.user) return json({ error: "Unauthorized" }, 401);
 
-  // ── admin 역할 확인 ────────────────────────────────────────────
-  // app_metadata 우선 (서버 전용, 위변조 불가), user_metadata 폴백 (레거시 계정 호환)
+  // ── admin 역할 확인 (app_metadata만 신뢰 — user_metadata는 사용자가 수정 가능) ──
   const caller = userData.user;
-  const callerRole = caller.app_metadata?.role ?? caller.user_metadata?.role;
+  const callerRole = caller.app_metadata?.role;
   if (callerRole !== "admin") return json({ error: "Forbidden" }, 403);
 
   // ── service_role 클라이언트 (auth admin + DB 직접 조작) ────────
@@ -61,6 +60,8 @@ Deno.serve(async (req: Request) => {
   // ── 참가자 생성 ────────────────────────────────────────────────
   if (action === "create") {
     const { name, email, password, department, position, team_id, status } = body;
+
+    if (!email || !name) return json({ error: "email, name은 필수입니다." }, 400);
 
     // password 미제공(엑셀 일괄 등록) 시 서버 환경변수 사용 — 클라이언트에 노출되지 않음
     const resolvedPassword = (password as string | undefined)?.trim()
@@ -105,13 +106,16 @@ Deno.serve(async (req: Request) => {
   if (action === "update") {
     const { participant_id, user_id, name, team_id, department, position, status } = body;
 
-    // 1. participants 행 업데이트
+    if (!participant_id) return json({ error: "participant_id가 필요합니다." }, 400);
+
     const patch: Record<string, unknown> = {};
     if (name !== undefined) patch.name = name;
     if (team_id !== undefined) patch.team_id = team_id;
     if (department !== undefined) patch.department = department;
     if (position !== undefined) patch.position = position;
     if (status !== undefined) patch.status = status;
+
+    if (Object.keys(patch).length === 0) return json({ error: "수정할 항목이 없습니다." }, 400);
 
     const { error: dbError } = await admin
       .from("participants")
@@ -120,14 +124,13 @@ Deno.serve(async (req: Request) => {
 
     if (dbError) return json({ error: dbError.message }, 400);
 
-    // 2. auth user 이름 동기화 (이름 변경 시) — DB 업데이트 성공 후 진행, 실패해도 non-fatal
+    // auth user 이름 동기화 (이름 변경 시) — DB 업데이트 성공 후 진행, 실패해도 non-fatal
     if (user_id && name !== undefined) {
       const { error: authError } = await admin.auth.admin.updateUserById(
         user_id as string,
         { user_metadata: { name } }
       );
       if (authError) {
-        // auth 동기화 실패는 치명적이지 않음 — DB는 이미 정상 업데이트됨
         console.warn("auth metadata sync failed (non-fatal):", authError.message);
       }
     }
@@ -139,21 +142,20 @@ Deno.serve(async (req: Request) => {
   if (action === "delete") {
     const { participant_id, user_id } = body;
 
-    // 1. participants 행 삭제
+    if (!participant_id) return json({ error: "participant_id가 필요합니다." }, 400);
+
+    // auth 먼저 삭제 → ON DELETE SET NULL이 participant.user_id 자동 처리
+    if (user_id) {
+      const { error: authError } = await admin.auth.admin.deleteUser(user_id as string);
+      if (authError) return json({ error: authError.message }, 400);
+    }
+
     const { error: dbError } = await admin
       .from("participants")
       .delete()
       .eq("id", participant_id as string);
 
     if (dbError) return json({ error: dbError.message }, 400);
-
-    // 2. 연결된 auth user 삭제
-    if (user_id) {
-      const { error: authError } = await admin.auth.admin.deleteUser(
-        user_id as string
-      );
-      if (authError) return json({ error: authError.message }, 400);
-    }
 
     return json({ success: true });
   }
