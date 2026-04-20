@@ -27,7 +27,6 @@ CREATE TABLE participants (
               CHECK (status IN ('pending', 'approved', 'rejected')),
   department  text NOT NULL DEFAULT '',
   position    text NOT NULL DEFAULT '',
-  is_leader   boolean NOT NULL DEFAULT false,
   user_id     uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at  timestamptz DEFAULT now()
 );
@@ -102,18 +101,6 @@ BEGIN
 END;
 $$;
 
--- participants 자기 참조 RLS의 무한 재귀를 방지하기 위한 헬퍼 함수
--- SECURITY DEFINER 로 실행되어 RLS 우회 후 호출자의 team_id 반환
-CREATE OR REPLACE FUNCTION get_my_team_id()
-RETURNS uuid
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT team_id FROM participants WHERE user_id = auth.uid() LIMIT 1;
-$$;
-
 -- ============================================================
 -- RLS
 -- ============================================================
@@ -132,20 +119,11 @@ CREATE POLICY "read" ON teams
 CREATE POLICY "admin_write" ON teams
   FOR ALL USING ((auth.jwt()->'app_metadata'->>'role') = 'admin');
 
--- participants
--- 세 정책은 OR 조건으로 합산됨
--- admin: 전체 읽기
+-- participants: admin 전체 읽기 / 본인 행만 읽기 (OR 합산)
 CREATE POLICY "admin_read" ON participants
   FOR SELECT USING ((auth.jwt()->'app_metadata'->>'role') = 'admin');
--- 본인 행 (팀 미배정 상태에서도 자신의 정보 조회 가능)
 CREATE POLICY "own_read" ON participants
   FOR SELECT USING (user_id = auth.uid());
--- 같은 팀 전체 읽기 (Dashboard 팀원 목록 표시용)
--- 직접 자기 참조 시 재귀 발생 → SECURITY DEFINER 함수로 우회
-CREATE POLICY "same_team_read" ON participants
-  FOR SELECT USING (
-    team_id IS NOT NULL AND team_id = get_my_team_id()
-  );
 CREATE POLICY "admin_write" ON participants
   FOR ALL USING ((auth.jwt()->'app_metadata'->>'role') = 'admin');
 
@@ -179,19 +157,16 @@ CREATE POLICY "read" ON submissions
   FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "admin_write" ON submissions
   FOR ALL USING ((auth.jwt()->'app_metadata'->>'role') = 'admin');
--- 팀장만 제출 및 수정 가능
-CREATE POLICY "leader_insert" ON submissions
+CREATE POLICY "team_insert" ON submissions
   FOR INSERT WITH CHECK (
     team_id IN (
-      SELECT team_id FROM participants
-      WHERE user_id = auth.uid() AND is_leader = true
+      SELECT team_id FROM participants WHERE user_id = auth.uid()
     )
   );
-CREATE POLICY "leader_update" ON submissions
+CREATE POLICY "team_update" ON submissions
   FOR UPDATE USING (
     team_id IN (
-      SELECT team_id FROM participants
-      WHERE user_id = auth.uid() AND is_leader = true
+      SELECT team_id FROM participants WHERE user_id = auth.uid()
     )
   );
 
@@ -206,3 +181,58 @@ CREATE POLICY "leader_update" ON submissions
 -- UPDATE auth.users
 -- SET raw_app_meta_data = raw_app_meta_data || '{"role":"judge"}'::jsonb
 -- WHERE email = 'judge1@xxx.com';
+
+
+-- ============================================================
+-- MIGRATION: 팀장 권한 추가
+-- 이미 위 쿼리로 테이블이 생성된 경우 아래 쿼리만 실행
+-- ============================================================
+
+-- 1. participants 테이블에 팀장 구분 컬럼 추가
+ALTER TABLE participants
+  ADD COLUMN is_leader boolean NOT NULL DEFAULT false;
+
+-- 2. participants 자기 참조 RLS의 무한 재귀를 방지하기 위한 헬퍼 함수
+--    SECURITY DEFINER 로 실행되어 RLS 우회 후 호출자의 team_id 반환
+CREATE OR REPLACE FUNCTION get_my_team_id()
+RETURNS uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT team_id FROM participants WHERE user_id = auth.uid() LIMIT 1;
+$$;
+
+-- 3. participants RLS 변경
+--    own_read → own_read + same_team_read (Dashboard 팀원 목록 정상 동작)
+DROP POLICY "own_read" ON participants;
+
+CREATE POLICY "own_read" ON participants
+  FOR SELECT USING (user_id = auth.uid());
+
+CREATE POLICY "same_team_read" ON participants
+  FOR SELECT USING (
+    team_id IS NOT NULL AND team_id = get_my_team_id()
+  );
+
+-- 4. submissions RLS 변경
+--    팀원 전체 → 팀장만 제출/수정 가능
+DROP POLICY "team_insert" ON submissions;
+DROP POLICY "team_update" ON submissions;
+
+CREATE POLICY "leader_insert" ON submissions
+  FOR INSERT WITH CHECK (
+    team_id IN (
+      SELECT team_id FROM participants
+      WHERE user_id = auth.uid() AND is_leader = true
+    )
+  );
+
+CREATE POLICY "leader_update" ON submissions
+  FOR UPDATE USING (
+    team_id IN (
+      SELECT team_id FROM participants
+      WHERE user_id = auth.uid() AND is_leader = true
+    )
+  );
