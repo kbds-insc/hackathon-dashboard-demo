@@ -83,6 +83,11 @@ export default function ParticipantDashboard() {
       setError(TEAM_MEMBER_LIMIT_MESSAGE);
       return;
     }
+    const emailLower = form.email.trim().toLowerCase();
+    if (participants.some((p) => p.email.toLowerCase() === emailLower)) {
+      setError('이미 등록된 이메일입니다.');
+      return;
+    }
 
     setSaving(true);
     setError('');

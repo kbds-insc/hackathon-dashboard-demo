@@ -193,12 +193,21 @@ async function parseExcelFile(
 
 function validateParticipantDraft(
   draft: ParticipantDraftRow,
-  teams: Team[]
+  teams: Team[],
+  existingParticipants: Participant[]
 ): Partial<Record<keyof ParticipantFormState, string>> {
   const nextErrors: Partial<Record<keyof ParticipantFormState, string>> = {};
 
   if (!draft.form.name.trim()) nextErrors.name = '이름을 입력해 주세요.';
-  if (!draft.form.email.trim()) nextErrors.email = '이메일을 입력해 주세요.';
+  if (!draft.form.email.trim()) {
+    nextErrors.email = '이메일을 입력해 주세요.';
+  } else {
+    const emailLower = draft.form.email.trim().toLowerCase();
+    const isDuplicate = existingParticipants.some(
+      (p) => p.email.toLowerCase() === emailLower && p.id !== draft.id
+    );
+    if (isDuplicate) nextErrors.email = '이미 등록된 이메일입니다.';
+  }
 
   const selectedTeam = teams.find((team) => team.id === draft.form.team);
   if (selectedTeam?.locked) {
@@ -206,6 +215,22 @@ function validateParticipantDraft(
   }
 
   return nextErrors;
+}
+
+function getDraftEmailDuplicateKeys(drafts: ParticipantDraftRow[]): Set<string> {
+  const emailToKeys = new Map<string, string[]>();
+  for (const draft of drafts) {
+    const email = draft.form.email.trim().toLowerCase();
+    if (!email) continue;
+    const keys = emailToKeys.get(email) ?? [];
+    keys.push(draft.key);
+    emailToKeys.set(email, keys);
+  }
+  return new Set(
+    Array.from(emailToKeys.values())
+      .filter((keys) => keys.length > 1)
+      .flat()
+  );
 }
 
 function statusLabel(status: ParticipantFormState['status']) {
@@ -583,14 +608,17 @@ export default function Participants() {
 
     let hasValidationError = false;
     const teamLimitErrors = getTeamLimitErrors(drafts);
+    const draftEmailDuplicateKeys = getDraftEmailDuplicateKeys(drafts);
     for (const draft of drafts) {
-      const errors = validateParticipantDraft(draft, displayTeams);
+      const errors = validateParticipantDraft(draft, displayTeams, displayParticipants);
+      if (draftEmailDuplicateKeys.has(draft.key)) {
+        errors.email = '입력된 행 중 동일한 이메일이 있습니다.';
+      }
       const teamLimitError = teamLimitErrors.get(draft.key);
       if (teamLimitError) errors.team = teamLimitError;
       setDraftErrors(draft.key, errors);
       if (Object.keys(errors).length > 0) hasValidationError = true;
     }
-
 
     if (hasValidationError) {
       setToast({

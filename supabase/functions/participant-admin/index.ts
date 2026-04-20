@@ -103,6 +103,16 @@ Deno.serve(async (req: Request) => {
 
     if (!email || !name) return json({ error: "email, name은 필수입니다." }, 400);
 
+    // 이메일 중복 사전 체크
+    const { data: existingByEmail } = await admin
+      .from("participants")
+      .select("id")
+      .eq("email", email as string)
+      .maybeSingle();
+    if (existingByEmail) {
+      return json({ error: "이미 등록된 이메일입니다." }, 409);
+    }
+
     let resolvedTeamId = (team_id as string | undefined) || null;
     let resolvedIsLeader = (is_leader as boolean | undefined) ?? false;
 
