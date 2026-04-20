@@ -91,6 +91,8 @@ const EMPTY_TEAM_ASSIGNMENT: TeamAssignmentState = {
 };
 
 const MAX_NEW_ROWS = 60;
+const MAX_TEAM_MEMBERS = 5;
+const TEAM_MEMBER_LIMIT_MESSAGE = `팀은 최대 ${MAX_TEAM_MEMBERS}명까지 구성할 수 있습니다.`;
 
 function Toast({ toast, onHide }: { toast: ToastState; onHide: () => void }) {
   useEffect(() => {
@@ -244,7 +246,7 @@ function mergeParticipants(baseParticipants: Participant[], optimisticParticipan
 }
 
 export default function Participants() {
-  const participants = useParticipants();
+  const { data: participants } = useParticipants();
   const teams = useTeams();
 
   const [tab, setTab] = useState<Tab>('participants');
@@ -414,10 +416,36 @@ export default function Participants() {
     });
   };
 
+  const hasLeaderInTeam = (teamId: string, draft: ParticipantDraftRow) => {
+    const hasSavedLeader = displayParticipants.some(
+      (participant) =>
+        participant.id !== draft.id &&
+        participant.team === teamId &&
+        participant.isLeader
+    );
+    const hasDraftLeader = [...newRows, ...Object.values(editRows)].some(
+      (item) =>
+        item.key !== draft.key &&
+        item.form.team === teamId &&
+        item.form.isLeader
+    );
+
+    return hasSavedLeader || hasDraftLeader;
+  };
+
   const toggleDraftIsLeader = (key: string) => {
+    const draft = newRows.find((item) => item.key === key) ?? editRows[key];
+    if (!draft) return;
+
+    const nextIsLeader = !draft.form.isLeader;
+    if (nextIsLeader && draft.form.team && hasLeaderInTeam(draft.form.team, draft)) {
+      setToast({ visible: true, message: '지정된 팀장이 존재합니다' });
+      return;
+    }
+
     const updater = (draft: ParticipantDraftRow): ParticipantDraftRow => ({
       ...draft,
-      form: { ...draft.form, isLeader: !draft.form.isLeader },
+      form: { ...draft.form, isLeader: nextIsLeader },
     });
     setNewRows((prev) => prev.map((d) => (d.key === key ? updater(d) : d)));
     setEditRows((prev) =>
@@ -425,17 +453,46 @@ export default function Participants() {
     );
   };
 
+  const getNextDraftForm = (
+    draft: ParticipantDraftRow,
+    field: keyof ParticipantFormState,
+    value: string
+  ): ParticipantFormState => {
+    const nextForm = { ...draft.form, [field]: value };
+    if (
+      field === 'team' &&
+      nextForm.isLeader &&
+      value &&
+      hasLeaderInTeam(value, draft)
+    ) {
+      return { ...nextForm, isLeader: false };
+    }
+
+    return nextForm;
+  };
+
   const updateDraftField = (
     key: string,
     field: keyof ParticipantFormState,
     value: string
   ) => {
+    const draft = newRows.find((item) => item.key === key) ?? editRows[key];
+    if (
+      draft &&
+      field === 'team' &&
+      draft.form.isLeader &&
+      value &&
+      hasLeaderInTeam(value, draft)
+    ) {
+      setToast({ visible: true, message: '지정된 팀장이 존재합니다' });
+    }
+
     setNewRows((prev) =>
       prev.map((draft) =>
         draft.key === key
           ? {
               ...draft,
-              form: { ...draft.form, [field]: value },
+              form: getNextDraftForm(draft, field, value),
               errors: draft.errors[field]
                 ? { ...draft.errors, [field]: undefined }
                 : draft.errors,
@@ -451,7 +508,7 @@ export default function Participants() {
         ...prev,
         [key]: {
           ...draft,
-          form: { ...draft.form, [field]: value },
+          form: getNextDraftForm(draft, field, value),
           errors: draft.errors[field]
             ? { ...draft.errors, [field]: undefined }
             : draft.errors,
@@ -489,20 +546,59 @@ export default function Participants() {
     });
   };
 
+  const getTeamLimitErrors = (drafts: ParticipantDraftRow[]) => {
+    const draftIds = new Set(
+      drafts
+        .map((draft) => draft.id)
+        .filter((id): id is string => !!id)
+    );
+    const finalTeamCounts = new Map<string, number>();
+
+    for (const participant of displayParticipants) {
+      if (!participant.team || draftIds.has(participant.id)) continue;
+      finalTeamCounts.set(participant.team, (finalTeamCounts.get(participant.team) ?? 0) + 1);
+    }
+
+    for (const draft of drafts) {
+      if (!draft.form.team) continue;
+      finalTeamCounts.set(draft.form.team, (finalTeamCounts.get(draft.form.team) ?? 0) + 1);
+    }
+
+    const overflowTeamIds = new Set(
+      Array.from(finalTeamCounts.entries())
+        .filter(([, count]) => count > MAX_TEAM_MEMBERS)
+        .map(([teamId]) => teamId)
+    );
+
+    return new Map(
+      drafts
+        .filter((draft) => draft.form.team && overflowTeamIds.has(draft.form.team))
+        .map((draft) => [draft.key, TEAM_MEMBER_LIMIT_MESSAGE])
+    );
+  };
+
   const handleSaveParticipants = async () => {
     const drafts = [...newRows, ...Object.values(editRows)];
     if (drafts.length === 0) return;
 
     let hasValidationError = false;
+    const teamLimitErrors = getTeamLimitErrors(drafts);
     for (const draft of drafts) {
-      const errors = validateParticipantDraft(draft, teams);
+      const errors = validateParticipantDraft(draft, displayTeams);
+      const teamLimitError = teamLimitErrors.get(draft.key);
+      if (teamLimitError) errors.team = teamLimitError;
       setDraftErrors(draft.key, errors);
       if (Object.keys(errors).length > 0) hasValidationError = true;
     }
 
 
     if (hasValidationError) {
-      setToast({ visible: true, message: '필수 항목과 팀 배정 상태를 확인해 주세요.' });
+      setToast({
+        visible: true,
+        message: teamLimitErrors.size > 0
+          ? TEAM_MEMBER_LIMIT_MESSAGE
+          : '필수 항목과 팀 배정 상태를 확인해 주세요.',
+      });
       return;
     }
 
@@ -659,9 +755,17 @@ export default function Participants() {
   };
 
   const moveCheckedCandidatesToSelected = () => {
+    const nextSelectedIds = [
+      ...new Set([...tAssignment.selectedParticipantIds, ...tAssignment.checkedCandidateIds]),
+    ];
+    if (nextSelectedIds.length > MAX_TEAM_MEMBERS) {
+      setToast({ visible: true, message: TEAM_MEMBER_LIMIT_MESSAGE });
+      return;
+    }
+
     setTAssignment((prev) => ({
       ...prev,
-      selectedParticipantIds: [...new Set([...prev.selectedParticipantIds, ...prev.checkedCandidateIds])],
+      selectedParticipantIds: nextSelectedIds,
       checkedCandidateIds: [],
     }));
   };
@@ -683,6 +787,10 @@ export default function Participants() {
 
   const handleTeamSubmit = async () => {
     if (!validateTeam()) return;
+    if (tAssignment.selectedParticipantIds.length > MAX_TEAM_MEMBERS) {
+      setToast({ visible: true, message: TEAM_MEMBER_LIMIT_MESSAGE });
+      return;
+    }
 
     const editingTeam =
       tModal?.mode === 'edit' ? displayTeams.find((team) => team.id === tModal.id) : null;
@@ -993,8 +1101,8 @@ export default function Participants() {
                       className="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#80766b]/30"
                     />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <label className="flex items-center gap-2 text-sm text-gray-600">
+                  <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
+                    <label className="flex shrink-0 items-center gap-2 text-sm text-gray-600">
                       <input
                         type="checkbox"
                         checked={
@@ -1011,7 +1119,7 @@ export default function Participants() {
                     <button
                       onClick={moveCheckedCandidatesToSelected}
                       disabled={tAssignment.checkedCandidateIds.length === 0}
-                      className="rounded-lg bg-[#80766b] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#6e645a] disabled:cursor-not-allowed disabled:opacity-40"
+                      className="shrink-0 whitespace-nowrap rounded-lg bg-[#80766b] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#6e645a] disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       선택 추가
                     </button>
@@ -1194,7 +1302,7 @@ export default function Participants() {
                       </div>
 
                       <div className="flex items-center justify-between gap-3">
-                        <label className="flex items-center gap-2 text-sm text-gray-600">
+                        <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-sm text-gray-600">
                           <input
                             type="checkbox"
                             checked={
@@ -1211,7 +1319,7 @@ export default function Participants() {
                         <button
                           onClick={moveCheckedCandidatesToSelected}
                           disabled={tAssignment.checkedCandidateIds.length === 0}
-                          className="rounded-lg bg-[#80766b] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#6e645a] disabled:cursor-not-allowed disabled:opacity-40"
+                          className="shrink-0 whitespace-nowrap rounded-lg bg-[#80766b] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#6e645a] disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           선택 추가
                         </button>
@@ -1421,15 +1529,18 @@ function ParticipantsTab({
         <div className="overflow-x-auto">
           <table className="min-w-[1100px] table-fixed text-sm">
             <colgroup>
+              <col style={{ width: 80 }} />
               <col style={{ width: 150 }} />
               <col style={{ width: 220 }} />
               <col style={{ width: 150 }} />
               <col style={{ width: 130 }} />
               <col style={{ width: 130 }} />
-              <col style={{ width: 170 }} />
+              <col style={{ width: 90 }} />
+              <col style={{ width: 100 }} />
             </colgroup>
             <thead>
               <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase tracking-wide text-gray-400">
+                <th className="pb-3 pr-3">팀장</th>
                 <th className="pb-3 pr-3">이름</th>
                 <th className="pb-3 pr-3">이메일</th>
                 <th className="pb-3 pr-3">팀</th>
@@ -1470,18 +1581,19 @@ function ParticipantsTab({
                 return (
                   <tr key={participant.id} className="transition-colors hover:bg-gray-50">
                     <td className="py-3 pr-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium text-gray-800">{participant.name}</span>
-                        {participant.isLeader && (
-                          <span className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700">
-                            <Crown className="h-3 w-3" />
-                            팀장
-                          </span>
-                        )}
-                      </div>
+                      {participant.isLeader ? (
+                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700">
+                          <Crown className="h-3 w-3" />
+                          팀장
+                        </span>
+                      ) : (
+                        <span className="text-gray-300">-</span>
+                      )}
+                    </td>
+                    <td className="py-3 pr-3">
+                      <span className="font-medium text-gray-800">{participant.name}</span>
                     </td>
                     <td className="truncate py-3 pr-3 text-gray-500">{participant.email}</td>
-                    <td className="py-3 pr-3 text-gray-300">—</td>
                     <td className="py-3 pr-3 text-gray-500">
                       <span className="flex items-center gap-1">
                         {teamName(participant.team)}
@@ -1553,6 +1665,28 @@ function ParticipantEditableRow({
   return (
     <tr className="bg-[#fffaf0] align-top">
       <td className="py-3 pr-3">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={draft.form.isLeader}
+          onClick={() => onToggleIsLeader(draft.key)}
+          className="flex items-center gap-1.5 text-xs text-gray-500"
+        >
+          <span
+            className={`relative h-5 w-9 rounded-full transition-colors ${
+              draft.form.isLeader ? 'bg-[#fcaf17]' : 'bg-gray-200'
+            }`}
+          >
+            <span
+              className={`absolute left-0 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                draft.form.isLeader ? 'translate-x-4' : 'translate-x-0.5'
+              }`}
+            />
+          </span>
+          <span className="sr-only">팀장</span>
+        </button>
+      </td>
+      <td className="py-3 pr-3">
         <input
           type="text"
           value={draft.form.name}
@@ -1561,15 +1695,6 @@ function ParticipantEditableRow({
           placeholder="이름"
         />
         {draft.errors.name && <p className="mt-1 text-xs text-red-500">{draft.errors.name}</p>}
-        <label className="mt-1.5 flex cursor-pointer items-center gap-1.5 select-none">
-          <input
-            type="checkbox"
-            checked={draft.form.isLeader}
-            onChange={() => onToggleIsLeader(draft.key)}
-            className="h-3.5 w-3.5 accent-amber-500"
-          />
-          <span className="text-xs text-gray-500">팀장</span>
-        </label>
       </td>
       <td className="py-3 pr-3">
         <input
@@ -1675,60 +1800,78 @@ function TeamsTab({
   onDeleteTeam: (id: string) => void;
   onToggleLock: (id: string) => void;
 }) {
+  const showAutoMatchControls = false;
+
   return (
     <>
       <Card className="mb-5">
-        <div className="mb-4 flex items-center gap-2">
-          <Shuffle className="h-5 w-5 text-[#80766b]" />
-          <h3 className="text-sm font-semibold text-gray-700">자동 매칭</h3>
-        </div>
+        {showAutoMatchControls ? (
+          <>
+            <div className="mb-4 flex items-center gap-2">
+              <Shuffle className="h-5 w-5 text-[#80766b]" />
+              <h3 className="text-sm font-semibold text-gray-700">자동 매칭</h3>
+            </div>
 
-        <div className="flex flex-wrap items-end gap-4">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">팀 크기</label>
-            <input
-              type="number"
-              min={1}
-              max={20}
-              value={matchOptions.teamSize}
-              onChange={(event) =>
-                setMatchOptions((prev) => ({
-                  ...prev,
-                  teamSize: Math.max(1, Number(event.target.value) || 1),
-                }))
-              }
-              className="w-20 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#80766b]/30"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-x-4 gap-y-2">
-            {[
-              { key: 'spreadDepartment' as const, label: '부서 분산' },
-              { key: 'spreadPosition' as const, label: '직급 분산' },
-              { key: 'limitLeader' as const, label: '리더 제한' },
-            ].map(({ key, label }) => (
-              <label key={key} className="flex cursor-pointer items-center gap-2 select-none">
+            <div className="flex flex-wrap items-end gap-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">팀 크기</label>
                 <input
-                  type="checkbox"
-                  checked={matchOptions[key]}
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={matchOptions.teamSize}
                   onChange={(event) =>
-                    setMatchOptions((prev) => ({ ...prev, [key]: event.target.checked }))
+                    setMatchOptions((prev) => ({
+                      ...prev,
+                      teamSize: Math.max(1, Number(event.target.value) || 1),
+                    }))
                   }
-                  className="h-4 w-4 accent-[#80766b]"
+                  className="w-20 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#80766b]/30"
                 />
-                <span className="text-sm text-gray-600">{label}</span>
-              </label>
-            ))}
-          </div>
+              </div>
 
-          <button
-            onClick={onAutoMatch}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#fcaf17] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#e09c10]"
-          >
-            <Shuffle className="h-4 w-4" />
-            자동 매칭 실행
-          </button>
-        </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {[
+                  { key: 'spreadDepartment' as const, label: '부서 분산' },
+                  { key: 'spreadPosition' as const, label: '직급 분산' },
+                  { key: 'limitLeader' as const, label: '리더 제한' },
+                ].map(({ key, label }) => (
+                  <label key={key} className="flex cursor-pointer items-center gap-2 select-none">
+                    <input
+                      type="checkbox"
+                      checked={matchOptions[key]}
+                      onChange={(event) =>
+                        setMatchOptions((prev) => ({ ...prev, [key]: event.target.checked }))
+                      }
+                      className="h-4 w-4 accent-[#80766b]"
+                    />
+                    <span className="text-sm text-gray-600">{label}</span>
+                  </label>
+                ))}
+              </div>
+
+              <button
+                onClick={onAutoMatch}
+                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#fcaf17] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#e09c10]"
+              >
+                <Shuffle className="h-4 w-4" />
+                자동 매칭 실행
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="mb-3 flex items-center gap-2">
+              <Users className="h-5 w-5 text-[#80766b]" />
+              <h3 className="text-sm font-semibold text-gray-700">팀 관리 안내</h3>
+            </div>
+            <ul className="list-disc space-y-1.5 pl-5 text-sm leading-6 text-gray-600">
+              <li>팀 추가 또는 수정으로 승인된 참가자를 직접 배정할 수 있습니다.</li>
+              <li>잠금된 팀은 수정, 삭제, 참가자 배정 변경이 제한됩니다.</li>
+              <li>팀장은 참가자 관리 탭에서 팀별 1명만 지정할 수 있습니다.</li>
+            </ul>
+          </>
+        )}
       </Card>
 
       <div className="mb-4 flex justify-end">

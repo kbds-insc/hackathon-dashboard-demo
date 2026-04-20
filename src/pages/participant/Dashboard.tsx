@@ -23,9 +23,11 @@ interface AddMemberForm {
 }
 
 const EMPTY_FORM: AddMemberForm = { name: '', email: '', department: '', position: '' };
+const MAX_TEAM_MEMBERS = 5;
+const TEAM_MEMBER_LIMIT_MESSAGE = `팀은 최대 ${MAX_TEAM_MEMBERS}명까지 구성할 수 있습니다.`;
 
 export default function ParticipantDashboard() {
-  const participants = useParticipants();
+  const { data: participants, upsertLocal } = useParticipants();
   const { participant, team, loading } = useCurrentParticipant();
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -61,6 +63,12 @@ export default function ParticipantDashboard() {
   const submitted = submitStatus === 'submitted';
 
   const openAddModal = () => {
+    if (myMembers.length >= MAX_TEAM_MEMBERS) {
+      setError(TEAM_MEMBER_LIMIT_MESSAGE);
+      setShowAddModal(true);
+      return;
+    }
+
     setForm(EMPTY_FORM);
     setError('');
     setShowAddModal(true);
@@ -71,10 +79,15 @@ export default function ParticipantDashboard() {
       setError('이름과 이메일은 필수입니다.');
       return;
     }
+    if (myMembers.length >= MAX_TEAM_MEMBERS) {
+      setError(TEAM_MEMBER_LIMIT_MESSAGE);
+      return;
+    }
+
     setSaving(true);
     setError('');
     try {
-      await createParticipantWithAuth({
+      const createdParticipant = await createParticipantWithAuth({
         name: form.name.trim(),
         email: form.email.trim(),
         department: form.department.trim(),
@@ -83,6 +96,7 @@ export default function ParticipantDashboard() {
         status: 'pending',
         isLeader: false,
       });
+      upsertLocal(createdParticipant);
       setShowAddModal(false);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '팀원 추가에 실패했습니다.');
