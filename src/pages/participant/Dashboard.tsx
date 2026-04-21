@@ -132,9 +132,8 @@ export default function ParticipantDashboard() {
         </div>
         {isEvaluated && (
           <p className="mt-3 pt-3 border-t border-gray-100 text-xs text-indigo-600">
-            평가가 완료되었습니다.{' '}
             <Link to="/participant/scores" className="font-medium underline underline-offset-2">
-              평가 결과 보기 →
+              🏆 심사가 완료됐어요. 우리 팀 순위 보러 가기
             </Link>
           </p>
         )}
