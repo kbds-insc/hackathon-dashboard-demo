@@ -171,6 +171,33 @@ CREATE POLICY "team_update" ON submissions
   );
 
 -- ============================================================
+-- settings (운영 설정 — 단일 row, id=1 고정)
+-- ============================================================
+
+CREATE TABLE settings (
+  id                  int PRIMARY KEY DEFAULT 1,
+  submission_deadline timestamptz,
+  scores_published    boolean NOT NULL DEFAULT false,
+  creativity_max      int     NOT NULL DEFAULT 25,
+  practicality_max    int     NOT NULL DEFAULT 25,
+  completion_max      int     NOT NULL DEFAULT 25,
+  presentation_max    int     NOT NULL DEFAULT 25
+);
+
+-- 초기 row 삽입
+INSERT INTO settings (id) VALUES (1) ON CONFLICT DO NOTHING;
+
+ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+
+-- 인증된 사용자 전체 읽기 (참가자도 deadline·scores_published 조회 필요)
+CREATE POLICY "settings_read" ON settings
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+-- 관리자만 수정
+CREATE POLICY "settings_write" ON settings
+  FOR ALL USING ((auth.jwt()->'app_metadata'->>'role') = 'admin');
+
+-- ============================================================
 -- 계정 역할 설정 (Supabase Auth에서 계정 생성 후 실행)
 -- ============================================================
 
@@ -184,7 +211,27 @@ CREATE POLICY "team_update" ON submissions
 
 
 -- ============================================================
--- MIGRATION: 팀장 권한 추가
+-- MIGRATION: 참석 투표 기능 추가
+-- ============================================================
+
+-- 1. 마일스톤별 참가자 참석 투표 테이블
+CREATE TABLE milestone_attendances (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  milestone_id   uuid NOT NULL REFERENCES milestones(id) ON DELETE CASCADE,
+  participant_id uuid NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+  attending      boolean NOT NULL,
+  updated_at     timestamptz DEFAULT now(),
+  UNIQUE(milestone_id, participant_id)
+);
+
+-- 2. RLS
+ALTER TABLE milestone_attendances ENABLE ROW LEVEL SECURITY;
+
+-- 인증된 전체 사용자 읽기 (관리자 집계 + 참가자 본인 확인)
+CREATE POLICY "read" ON milestone_attendances
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+-- 참가자 write는 Edge Function(service_role)이 처리하므로 별도 정책 불필요
 -- 이미 위 쿼리로 테이블이 생성된 경우 아래 쿼리만 실행
 -- ============================================================
 

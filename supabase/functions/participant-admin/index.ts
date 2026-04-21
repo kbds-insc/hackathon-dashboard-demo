@@ -92,8 +92,8 @@ Deno.serve(async (req: Request) => {
   }
   const { action } = body;
 
-  // participant는 create만 허용 (update, delete, reset-password는 admin 전용)
-  if (!isAdmin && action !== "create") {
+  // participant는 create, vote-attendance만 허용 (update, delete, reset-password는 admin 전용)
+  if (!isAdmin && action !== "create" && action !== "vote-attendance") {
     return json({ error: "Forbidden" }, 403);
   }
 
@@ -287,6 +287,64 @@ Deno.serve(async (req: Request) => {
       }
     );
     if (authError) return json({ error: authError.message }, 400);
+
+    return json({ success: true });
+  }
+
+  // ── 참석 투표 (participant 전용) ──────────────────────────────
+  if (action === "vote-attendance") {
+    const { milestone_id, attending } = body;
+
+    if (!milestone_id) return json({ error: "milestone_id가 필요합니다." }, 400);
+    if (typeof attending !== "boolean") return json({ error: "attending은 boolean이어야 합니다." }, 400);
+
+    if (!callerParticipant) {
+      return json({ error: "참가자 정보를 찾을 수 없습니다." }, 404);
+    }
+
+    // 마일스톤 날짜 조회
+    const { data: milestone, error: milestoneError } = await admin
+      .from("milestones")
+      .select("date")
+      .eq("id", milestone_id as string)
+      .single();
+
+    if (milestoneError || !milestone) {
+      return json({ error: "일정을 찾을 수 없습니다." }, 404);
+    }
+
+    // 투표 가능 기간 확인 (KST 기준: 7일 전 자정 ~ 당일 평일 18:00 / 주말 10:00)
+    const milestoneDateStr = milestone.date as string; // "YYYY-MM-DD"
+    const now = new Date();
+
+    const kstMidnight = new Date(`${milestoneDateStr}T00:00:00+09:00`);
+    const openTime = new Date(kstMidnight.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    // 요일 판단: 정오 KST(03:00 UTC)로 UTC 날짜와 KST 날짜를 동일하게 맞춤
+    const dayOfWeek = new Date(`${milestoneDateStr}T12:00:00+09:00`).getUTCDay(); // 0=일, 6=토
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const closeHour = isWeekend ? 10 : 18;
+    const closeTime = new Date(`${milestoneDateStr}T${String(closeHour).padStart(2, "0")}:00:00+09:00`);
+
+    if (now < openTime || now > closeTime) {
+      return json({
+        error: "투표 가능 기간이 아닙니다. 일정 7일 전부터 당일 (평일 오후 6시, 주말 오전 10시)까지 투표할 수 있습니다.",
+      }, 403);
+    }
+
+    const { error: upsertError } = await admin
+      .from("milestone_attendances")
+      .upsert(
+        {
+          milestone_id,
+          participant_id: callerParticipant.id,
+          attending,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "milestone_id,participant_id" }
+      );
+
+    if (upsertError) return json({ error: upsertError.message }, 400);
 
     return json({ success: true });
   }
