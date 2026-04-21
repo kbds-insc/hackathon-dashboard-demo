@@ -8,6 +8,7 @@ import {
   FileCheck,
   Trophy,
   CalendarDays,
+  Settings,
   Menu,
   X,
   LogOut,
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
   { path: '/admin/notices',       label: '공지사항',    icon: Megaphone,       roles: ['admin'] },
   { path: '/admin/submissions',   label: '제출 현황',   icon: FileCheck,       roles: ['admin'] },
   { path: '/admin/scores',        label: '심사 점수판', icon: Trophy,          roles: ['admin'] },
+  { path: '/admin/settings',     label: '운영 설정',   icon: Settings,        roles: ['admin'] },
 ];
 
 function useActiveNav() {

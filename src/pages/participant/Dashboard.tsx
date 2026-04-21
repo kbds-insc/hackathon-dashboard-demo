@@ -5,6 +5,7 @@ import Badge from '../../components/ui/Badge';
 import { useParticipants } from '../../hooks/useParticipants';
 import { useCurrentParticipant } from '../../hooks/useCurrentParticipant';
 import { useScores } from '../../hooks/useScores';
+import { useSettings } from '../../hooks/useSettings';
 import { SCORE_CRITERIA } from '../../data/scoreStore';
 import { CheckCircle2, Clock, Crown, Lock, Plus, Star, Trophy, X } from 'lucide-react';
 import { createParticipantWithAuth } from '../../data/hackathonStore';
@@ -32,6 +33,13 @@ export default function ParticipantDashboard() {
   const { data: participants, upsertLocal } = useParticipants();
   const { participant, team, loading } = useCurrentParticipant();
   const allScores = useScores();
+  const settings = useSettings();
+  const criteriaMax: Record<string, number> = {
+    creativity: settings.creativityMax,
+    practicality: settings.practicalityMax,
+    completion: settings.completionMax,
+    presentation: settings.presentationMax,
+  };
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showLockAlert, setShowLockAlert] = useState(false);
@@ -215,6 +223,7 @@ export default function ParticipantDashboard() {
       </Card>
 
       {/* ── 평가 결과 ── */}
+      {settings.scoresPublished && (
       <Card title="평가 결과" className="mb-5">
         {!submitted ? (
           <div className="flex items-center gap-3 p-4 rounded-xl bg-gray-50 border border-gray-200">
@@ -249,9 +258,10 @@ export default function ParticipantDashboard() {
               </div>
             </div>
             <div className="space-y-3">
-              {SCORE_CRITERIA.map(({ key, label, max }) => {
+              {SCORE_CRITERIA.map(({ key, label }) => {
+                const max = criteriaMax[key];
                 const score = myScore[key];
-                const pct = Math.round((score / max) * 100);
+                const pct = max > 0 ? Math.round((score / max) * 100) : 0;
                 return (
                   <div key={key}>
                     <div className="flex justify-between items-center mb-1">
@@ -274,6 +284,7 @@ export default function ParticipantDashboard() {
           </div>
         )}
       </Card>
+      )}
 
       {/* ── 팀 잠금 알림 팝업 ── */}
       {showLockAlert && (

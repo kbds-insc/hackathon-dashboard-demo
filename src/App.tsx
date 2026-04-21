@@ -12,6 +12,7 @@ import AdminMilestones from './pages/admin/Milestones';
 import Submissions from './pages/admin/Submissions';
 import Scoring from './pages/admin/Scoring';
 import ScoreInput from './pages/admin/ScoreInput';
+import AdminSettings from './pages/admin/Settings';
 // Participant pages
 import ParticipantDashboard from './pages/participant/Dashboard';
 import Timeline from './pages/participant/Timeline';
@@ -96,6 +97,14 @@ export default function App() {
             element={
               <ProtectedRoute roles={['admin', 'judge']}>
                 <ScoreInput />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/settings"
+            element={
+              <ProtectedRoute roles={['admin']}>
+                <AdminSettings />
               </ProtectedRoute>
             }
           />
