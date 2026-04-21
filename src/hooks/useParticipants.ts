@@ -28,6 +28,7 @@ export function useParticipants(): UseParticipantsResult {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refetch().catch(console.error);
 
     const channel = supabase
