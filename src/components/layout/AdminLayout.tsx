@@ -113,7 +113,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           <div className="ml-auto flex items-center gap-2">
             {/* 사용자 이름 (데스크탑) */}
             {user && (
-              <span className="hidden lg:block text-sm text-gray-600">
+              <span className="hidden lg:block text-sm text-gray-600 lg:order-1">
                 {user.name}
               </span>
             )}
@@ -121,20 +121,20 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             {!isJudge && (
               <Link
                 to={SETTINGS_PATH}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors lg:order-3"
               >
                 <Settings className="w-4 h-4 shrink-0" />
                 <span>운영 설정</span>
               </Link>
             )}
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#80766b]/10 text-[#80766b] ring-1 ring-[#80766b]/20">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#80766b]/10 text-[#80766b] ring-1 ring-[#80766b]/20 lg:order-2">
               {roleLabel}
             </span>
             {/* 로그아웃 (데스크탑 헤더는 아이콘만) */}
             <button
               onClick={handleLogout}
               title="로그아웃"
-              className="hidden lg:flex p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+              className="hidden lg:flex p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors lg:order-4"
             >
               <LogOut className="w-4 h-4" />
             </button>
