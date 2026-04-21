@@ -1763,8 +1763,11 @@ function ParticipantEditableRow({
           type="button"
           role="switch"
           aria-checked={draft.form.isLeader}
+          disabled={!draft.form.team}
           onClick={() => onToggleIsLeader(draft.key)}
-          className="flex items-center gap-1.5 text-xs text-gray-500"
+          className={`flex items-center gap-1.5 text-xs text-gray-500 ${
+            !draft.form.team ? 'cursor-not-allowed opacity-40' : ''
+          }`}
         >
           <span
             className={`relative h-5 w-9 rounded-full transition-colors ${

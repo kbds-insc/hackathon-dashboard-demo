@@ -13,6 +13,8 @@ import {
   X,
   LogOut,
 } from 'lucide-react';
+
+const SETTINGS_PATH = '/admin/settings';
 import { useAuth } from '../../contexts/useAuth';
 
 const NAV_ITEMS = [
@@ -108,12 +110,22 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             {currentLabel}
           </span>
 
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2">
             {/* 사용자 이름 (데스크탑) */}
             {user && (
               <span className="hidden lg:block text-sm text-gray-600">
                 {user.name}
               </span>
+            )}
+            {/* 운영 설정 버튼 (관리자만) */}
+            {!isJudge && (
+              <Link
+                to={SETTINGS_PATH}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                <Settings className="w-4 h-4 shrink-0" />
+                <span>운영 설정</span>
+              </Link>
             )}
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#80766b]/10 text-[#80766b] ring-1 ring-[#80766b]/20">
               {roleLabel}
@@ -138,7 +150,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         {!isJudge && (
           <nav className="lg:hidden fixed bottom-0 inset-x-0 z-20 bg-white border-t border-gray-100">
             <ul className="flex">
-              {NAV_ITEMS.map(({ path, label, icon: Icon }) => {
+              {NAV_ITEMS.filter(({ path }) => path !== SETTINGS_PATH).map(({ path, label, icon: Icon }) => {
                 const active = isActive(path);
                 return (
                   <li key={path} className="flex-1">
