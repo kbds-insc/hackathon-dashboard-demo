@@ -10,13 +10,14 @@ import { Users, Flag, FileCheck, Trophy } from 'lucide-react';
 
 export default function Dashboard() {
   const teams = useTeams();
-  const participants = useParticipants();
+  const { data: participants } = useParticipants();
   const scores = useScores();
 
   const { data: notices } = useNotices();
   const submittedCount = teams.filter((t) => t.submitStatus === 'submitted').length;
   const scoredCount = scores.filter((s) => s.total > 0).length;
-  const recentNotices = notices.slice(0, 3);
+  const recentNotices = notices.slice(0, 5);
+  const mobileRecentNotices = notices.slice(0, 2);
 
   return (
     <AdminLayout>
@@ -38,48 +39,65 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* ── 팀별 제출 현황 ── */}
-      <Card title="팀별 제출 현황" className="mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {teams.map((team) => {
-            const submitted = team.submitStatus === 'submitted';
-            return (
-              <div
-                key={team.id}
-                className={`rounded-xl border p-4 flex items-center justify-between gap-3 transition-colors ${
-                  submitted
-                    ? 'bg-indigo-50 border-indigo-200'
-                    : 'bg-gray-50 border-gray-200'
-                }`}
-              >
-                <div className="min-w-0">
-                  <p className={`text-sm font-semibold truncate ${submitted ? 'text-indigo-800' : 'text-gray-700'}`}>
-                    {team.name}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-0.5">팀원 {team.members.length}명</p>
-                </div>
-                <Badge status={team.submitStatus} />
-              </div>
-            );
-          })}
-        </div>
-      </Card>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+        {/* ── 팀별 제출 현황 ── */}
+        <Card title="팀별 제출 현황" className="order-2 lg:order-1">
+          <div className="max-h-[460px] overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+              {teams.map((team) => {
+                const submitted = team.submitStatus === 'submitted';
+                return (
+                  <div
+                    key={team.id}
+                    className={`rounded-xl border p-4 flex items-center justify-between gap-3 transition-colors ${
+                      submitted
+                        ? 'bg-indigo-50 border-indigo-200'
+                        : 'bg-gray-50 border-gray-200'
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <p className={`text-sm font-semibold truncate ${submitted ? 'text-indigo-800' : 'text-gray-700'}`}>
+                        {team.name}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">팀원 {team.members.length}명</p>
+                    </div>
+                    <Badge status={team.submitStatus} />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </Card>
 
-      {/* ── 최근 공지사항 ── */}
-      <Card title="최근 공지사항">
-        <ul className="divide-y divide-gray-100">
-          {recentNotices.map((notice) => (
-            <li key={notice.id} className="py-3 first:pt-0 last:pb-0">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-medium text-gray-800 leading-snug">{notice.title}</p>
-                <span className="text-xs text-gray-400 shrink-0">{notice.date}</span>
-              </div>
-              <p className="text-xs text-gray-400 mt-0.5">{notice.author}</p>
-              <p className="text-sm text-gray-500 mt-1.5 line-clamp-2">{notice.content}</p>
-            </li>
-          ))}
-        </ul>
-      </Card>
+        {/* ── 최근 공지사항 ── */}
+        <Card title="최근 공지사항" className="order-1 lg:order-2">
+          <ul className="divide-y divide-gray-100 lg:hidden">
+            {mobileRecentNotices.map((notice) => (
+              <li key={notice.id} className="py-3 first:pt-0 last:pb-0">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium text-gray-800 leading-snug">{notice.title}</p>
+                  <span className="text-xs text-gray-400 shrink-0">{notice.date}</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5">{notice.author}</p>
+                <p className="text-sm text-gray-500 mt-1.5 line-clamp-2">{notice.content}</p>
+              </li>
+            ))}
+          </ul>
+
+          <ul className="hidden divide-y divide-gray-100 lg:block">
+            {recentNotices.map((notice) => (
+              <li key={notice.id} className="py-3 first:pt-0 last:pb-0">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium text-gray-800 leading-snug">{notice.title}</p>
+                  <span className="text-xs text-gray-400 shrink-0">{notice.date}</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5">{notice.author}</p>
+                <p className="text-sm text-gray-500 mt-1.5 line-clamp-2">{notice.content}</p>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </div>
     </AdminLayout>
   );
 }

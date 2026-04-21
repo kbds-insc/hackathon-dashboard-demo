@@ -9,6 +9,7 @@ export interface Participant {
   department: string;
   position: string;
   userId?: string;   // auth.users.id (신규 등록 참가자만 존재)
+  isLeader?: boolean;
 }
 
 export interface Team {
