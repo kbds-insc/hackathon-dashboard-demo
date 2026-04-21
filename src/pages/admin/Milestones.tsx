@@ -318,13 +318,6 @@ export default function Milestones() {
                         </p>
                         <div className="flex items-center gap-1">
                           <button
-                            onClick={() => openAttendanceModal(m)}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
-                            title="참석 명단"
-                          >
-                            <Users className="w-3.5 h-3.5" />
-                          </button>
-                          <button
                             onClick={() => openEdit(m)}
                             className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
                             title="수정"
@@ -339,6 +332,17 @@ export default function Milestones() {
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
+                      </div>
+
+                      {/* 3행: 참석 명단 버튼 */}
+                      <div className="mt-2.5 pt-2.5 border-t border-gray-100">
+                        <button
+                          onClick={() => openAttendanceModal(m)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors w-full justify-center"
+                        >
+                          <Users className="w-3.5 h-3.5" />
+                          참석 명단 보기
+                        </button>
                       </div>
 
                       {/* 3행: 설명 */}
