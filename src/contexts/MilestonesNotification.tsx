@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useMilestones } from '../hooks/useMilestones';
@@ -27,26 +27,26 @@ export function MilestonesNotificationProvider({ children }: { children: ReactNo
   const { user } = useAuth();
   const { pathname } = useLocation();
   const storageKey = `milestones_seen_${user?.id ?? ''}`;
-  const [hasNew, setHasNew] = useState(false);
-  const loadedRef = useRef(false);
 
-  // 마일스톤 변경 시 hasNew 재계산
-  useEffect(() => {
-    if (milestones.length === 0 && !loadedRef.current) return;
-    loadedRef.current = true;
-    const current = computeFingerprint(milestones);
-    const seen = localStorage.getItem(storageKey) ?? '';
-    setHasNew(current !== seen);
-  }, [milestones, storageKey]);
+  // Track seen fingerprint per storageKey (handles user login/logout)
+  const [seenEntry, setSeenEntry] = useState<{ key: string; fp: string }>({
+    key: storageKey,
+    fp: localStorage.getItem(storageKey) ?? '',
+  });
 
-  // 일정 페이지 방문 시 자동 읽음 처리
+  // Derive hasNew in render — no useEffect needed for this
+  const currentFp = milestones.length > 0 ? computeFingerprint(milestones) : null;
+  const effectiveSeen = seenEntry.key === storageKey ? seenEntry.fp : (localStorage.getItem(storageKey) ?? '');
+  const hasNew = currentFp !== null && currentFp !== effectiveSeen;
+
+  // Mark as seen when visiting schedule page
   useEffect(() => {
-    if (!pathname.startsWith(SCHEDULE_PATH)) return;
-    if (milestones.length === 0) return;
-    const current = computeFingerprint(milestones);
-    localStorage.setItem(storageKey, current);
-    setHasNew(false);
-  }, [pathname, milestones, storageKey]);
+    if (!pathname.startsWith(SCHEDULE_PATH) || currentFp === null) return;
+    localStorage.setItem(storageKey, currentFp);
+    // Responding to navigation — legitimate side effect that requires setState in effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSeenEntry({ key: storageKey, fp: currentFp });
+  }, [pathname, currentFp, storageKey]);
 
   return (
     <MilestonesNotificationContext.Provider value={{ hasNew }}>
@@ -55,6 +55,7 @@ export function MilestonesNotificationProvider({ children }: { children: ReactNo
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useMilestonesNotification() {
   return useContext(MilestonesNotificationContext);
 }

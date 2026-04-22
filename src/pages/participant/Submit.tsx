@@ -4,7 +4,9 @@ import Card from '../../components/ui/Card';
 import { useCurrentParticipant } from '../../hooks/useCurrentParticipant';
 import { apiFetchSubmission, apiUpsertSubmission } from '../../api/submissions';
 import type { Submission } from '../../api/submissions';
-import { CheckCircle2, AlertCircle, ExternalLink } from 'lucide-react';
+import { CheckCircle2, AlertCircle, ExternalLink, Lock, Pencil } from 'lucide-react';
+import { useSettings } from '../../hooks/useSettings';
+import { isSubmissionOpen } from '../../api/settings';
 
 function SubmissionReadOnly({ submission }: { submission: Submission }) {
   const githubHref = getSafeHttpsHref(submission.githubUrl);
@@ -69,10 +71,13 @@ function getUrlError(value: string, label: string): string | null {
 
 export default function Submit() {
   const { participant, team, loading: teamLoading } = useCurrentParticipant();
+  const settings = useSettings();
+  const submissionOpen = isSubmissionOpen(settings);
   const isLeader = participant?.isLeader ?? false;
 
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [loadingSubmission, setLoadingSubmission] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
 
   const [github, setGithub] = useState('');
   const [slides, setSlides] = useState('');
@@ -101,6 +106,17 @@ export default function Submit() {
   const submitted = submission !== null;
   const isFormValid = github.trim() && slides.trim() && description.trim();
 
+  const handleCancelEdit = () => {
+    if (submission) {
+      setGithub(submission.githubUrl);
+      setSlides(submission.slidesUrl);
+      setDescription(submission.description);
+      setGithubError(null);
+      setSlidesError(null);
+    }
+    setIsEditing(false);
+  };
+
   const handleSubmit = async () => {
     if (!isFormValid || !team?.id) return;
 
@@ -119,6 +135,7 @@ export default function Submit() {
       });
       const updated = await apiFetchSubmission(team.id);
       setSubmission(updated);
+      setIsEditing(false);
     } catch {
       console.error('제출 실패');
     } finally {
@@ -164,14 +181,35 @@ export default function Submit() {
               </div>
             </div>
             <SubmissionReadOnly submission={submission!} />
+            <div className="flex items-start gap-3 bg-amber-50 border border-amber-100 rounded-xl p-4 text-sm text-amber-800">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+              <p>팀장만 제출 내용을 수정할 수 있습니다.</p>
+            </div>
           </>
         ) : (
           <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
             <AlertCircle className="w-10 h-10 text-gray-300" />
-            <p className="text-sm font-medium text-gray-500">팀장만 제출하기가 가능합니다.</p>
+            <p className="text-sm font-medium text-gray-500">팀장만 제출 및 수정이 가능합니다.</p>
             <p className="text-xs text-gray-400">제출이 완료되면 여기서 내역을 확인할 수 있습니다.</p>
           </div>
         )}
+      </ParticipantLayout>
+    );
+  }
+
+  // 제출 기간 마감 + 미제출
+  if (!submissionOpen && !submitted) {
+    return (
+      <ParticipantLayout>
+        <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+          <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center">
+            <Lock className="w-6 h-6 text-gray-400" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-gray-700">제출 기간이 종료되었습니다</p>
+            <p className="text-sm text-gray-400 mt-1">더 이상 결과물을 제출할 수 없습니다.</p>
+          </div>
+        </div>
       </ParticipantLayout>
     );
   }
@@ -201,17 +239,107 @@ export default function Submit() {
 
       {/* ── 제출 완료 상태 ── */}
       {submitted ? (
-        <>
-          <SubmissionReadOnly submission={submission!} />
-          <div className="flex items-start gap-3 bg-amber-50 border border-amber-100 rounded-xl p-4 text-sm text-amber-800">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
-            <p>
-              제출 내용 수정이 필요한 경우 운영진에게 문의해주세요.
-              <br />
-              <span className="text-amber-600 text-xs">contact@hackathon2026.com</span>
-            </p>
-          </div>
-        </>
+        isEditing ? (
+          <>
+            <div className="flex items-start gap-3 bg-blue-50 border border-blue-100 rounded-xl p-4 mb-5 text-sm text-blue-800">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-blue-500" />
+              <ul className="space-y-1 text-xs leading-relaxed">
+                <li>• GitHub 저장소는 <strong>public</strong>으로 설정해주세요.</li>
+                <li>• 발표 자료는 심사위원이 접근 가능한 링크여야 합니다.</li>
+                <li>• 제출 마감 이후 접수된 결과물은 심사에서 제외될 수 있습니다.</li>
+              </ul>
+            </div>
+            <Card title="결과물 수정">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                    GitHub URL <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://github.com/your-team/project"
+                    value={github}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setGithub(value);
+                      setGithubError(getUrlError(value, 'GitHub URL'));
+                    }}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#80766b]/30 placeholder-gray-300"
+                  />
+                  {githubError && <p className="mt-1 text-xs text-red-600">{githubError}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                    발표 자료 URL <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://slides.example.com/your-presentation"
+                    value={slides}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSlides(value);
+                      setSlidesError(getUrlError(value, '발표 자료 URL'));
+                    }}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#80766b]/30 placeholder-gray-300"
+                  />
+                  {slidesError && <p className="mt-1 text-xs text-red-600">{slidesError}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                    프로젝트 설명 <span className="text-red-400">*</span>
+                  </label>
+                  <textarea
+                    placeholder="프로젝트 소개, 주요 기능, 기술 스택 등을 간략히 설명해주세요."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={5}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#80766b]/30 placeholder-gray-300 resize-none"
+                  />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={handleCancelEdit}
+                    className="px-4 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={!isFormValid || saving}
+                    className="px-4 py-2 bg-[#80766b] text-white text-sm font-semibold rounded-lg hover:bg-[#6e645a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {saving ? '저장 중...' : '저장'}
+                  </button>
+                </div>
+              </div>
+            </Card>
+          </>
+        ) : (
+          <>
+            <SubmissionReadOnly submission={submission!} />
+            {submissionOpen ? (
+              <div className="flex justify-end mb-4">
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-[#80766b] hover:bg-[#80766b]/10 rounded-lg transition-colors"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  수정하기
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4 text-sm text-gray-600">
+                <Lock className="w-4 h-4 shrink-0 mt-0.5 text-gray-400" />
+                <p>제출 기간이 종료되어 수정할 수 없습니다.</p>
+              </div>
+            )}
+            <div className="flex items-start gap-3 bg-amber-50 border border-amber-100 rounded-xl p-4 text-sm text-amber-800">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+              <p>팀장만 제출 내용을 수정할 수 있습니다.</p>
+            </div>
+          </>
+        )
       ) : (
         <>
           {/* ── 주의사항 ── */}
@@ -220,7 +348,7 @@ export default function Submit() {
             <ul className="space-y-1 text-xs leading-relaxed">
               <li>• GitHub 저장소는 <strong>public</strong>으로 설정해주세요.</li>
               <li>• 발표 자료는 심사위원이 접근 가능한 링크여야 합니다.</li>
-              <li>• 제출 후 수정은 운영진에게 별도 문의가 필요합니다.</li>
+              <li>• 제출 후에도 팀장이 직접 수정할 수 있습니다.</li>
               <li>• 제출 마감 이후 접수된 결과물은 심사에서 제외될 수 있습니다.</li>
             </ul>
           </div>

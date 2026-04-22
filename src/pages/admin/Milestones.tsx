@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import * as XLSX from 'xlsx';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { useMilestones } from '../../hooks/useMilestones';
 import {
@@ -6,8 +7,10 @@ import {
   apiUpdateMilestone,
   apiDeleteMilestone,
 } from '../../api/milestones';
+import { apiFetchMilestoneAttendances } from '../../api/attendances';
+import type { MilestoneAttendance } from '../../api/attendances';
 import type { Milestone } from '../../data/mockData';
-import { Plus, Pencil, Trash2, X, CalendarDays, Lock, Globe, CheckCircle2, Circle } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, CalendarDays, Lock, Globe, CheckCircle2, Circle, Users, Download } from 'lucide-react';
 
 interface FormState {
   title: string;
@@ -32,6 +35,10 @@ export default function Milestones() {
   const [saving, setSaving] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
   const [toast, setToast] = useState('');
+
+  const [attendanceModal, setAttendanceModal] = useState<{ id: string; title: string } | null>(null);
+  const [attendanceData, setAttendanceData] = useState<MilestoneAttendance[]>([]);
+  const [loadingAttendance, setLoadingAttendance] = useState(false);
 
   const publicCount = milestones.filter((m) => m.isPublic).length;
   const doneCount = milestones.filter((m) => m.isDone).length;
@@ -108,6 +115,35 @@ export default function Milestones() {
         }
       },
     });
+  };
+
+  const openAttendanceModal = async (m: Milestone) => {
+    setAttendanceModal({ id: m.id, title: m.title });
+    setAttendanceData([]);
+    setLoadingAttendance(true);
+    try {
+      setAttendanceData(await apiFetchMilestoneAttendances(m.id));
+    } catch {
+      showToast('참석 명단을 불러오지 못했습니다.');
+    } finally {
+      setLoadingAttendance(false);
+    }
+  };
+
+  const handleExcelDownload = () => {
+    if (!attendanceModal) return;
+    const rows = attendanceData.map((a) => ({
+      이름: a.participantName,
+      팀장여부: a.isLeader ? '팀장' : '',
+      팀: a.teamName,
+      부서: a.participantDepartment,
+      직급: a.participantPosition,
+      투표일시: a.updatedAt,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '참석자명단');
+    XLSX.writeFile(wb, `${attendanceModal.title}_참석자명단.xlsx`);
   };
 
   const currentIdx = milestones.findIndex((m) => !m.isDone);
@@ -297,6 +333,17 @@ export default function Milestones() {
                         </div>
                       </div>
 
+                      {/* 3행: 참석 명단 버튼 */}
+                      <div className="mt-2.5 pt-2.5 border-t border-gray-100">
+                        <button
+                          onClick={() => openAttendanceModal(m)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg transition-colors w-full justify-center"
+                        >
+                          <Users className="w-3.5 h-3.5" />
+                          참석 명단 보기
+                        </button>
+                      </div>
+
                       {/* 3행: 설명 */}
                       {m.description && (
                         <p className={`text-xs mt-1.5 leading-relaxed ${m.isDone ? 'text-gray-300' : 'text-gray-500'}`}>
@@ -309,6 +356,80 @@ export default function Milestones() {
               );
             })}
           </ol>
+        </div>
+      )}
+
+      {/* ── 참석 명단 모달 ── */}
+      {attendanceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl flex flex-col max-h-[80dvh]">
+            {/* 헤더 */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-800">{attendanceModal.title} — 참석 명단</h3>
+                {!loadingAttendance && (
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    참석 {attendanceData.length}명
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExcelDownload}
+                  disabled={loadingAttendance || attendanceData.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  엑셀 다운로드
+                </button>
+                <button
+                  onClick={() => setAttendanceModal(null)}
+                  className="p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* 내용 */}
+            <div className="px-5 py-4">
+              {loadingAttendance ? (
+                <p className="text-sm text-gray-400 text-center py-10">불러오는 중...</p>
+              ) : attendanceData.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-10">참석 투표한 참가자가 없습니다.</p>
+              ) : (
+                <div className="overflow-y-auto max-h-[380px]">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-white">
+                      <tr className="text-left text-xs font-medium text-gray-400 border-b border-gray-100">
+                        <th className="pb-2 pr-3">이름</th>
+                        <th className="pb-2 pr-3">팀</th>
+                        <th className="pb-2 pr-3">부서</th>
+                        <th className="pb-2">직급</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {attendanceData.map((a) => (
+                        <tr key={a.id}>
+                          <td className="py-2 pr-3">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium text-gray-800">{a.participantName}</span>
+                              {a.isLeader && (
+                                <span className="text-[10px] font-semibold px-1 py-0.5 rounded bg-amber-100 text-amber-700 leading-none shrink-0">팀장</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2 pr-3 text-gray-500">{a.teamName}</td>
+                          <td className="py-2 pr-3 text-gray-500">{a.participantDepartment || '-'}</td>
+                          <td className="py-2 text-gray-500">{a.participantPosition || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
