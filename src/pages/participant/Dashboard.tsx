@@ -89,7 +89,7 @@ export default function ParticipantDashboard() {
       return;
     }
     if (!/^[A-Za-z][0-9]{6}$/.test(form.employeeId.trim())) {
-      setError('사번 형식이 올바르지 않습니다. (알파벳 1자 + 숫자 6자리, 예: A123456)');
+      setError('사번 형식이 올바르지 않습니다. (예: D123456)');
       return;
     }
     if (myMembers.length >= MAX_TEAM_MEMBERS) {
@@ -181,7 +181,9 @@ export default function ParticipantDashboard() {
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-400 truncate">{member.employeeId}</p>
+                <p className="text-xs text-gray-400 truncate">
+                  {[member.department, member.position].filter(Boolean).join(' · ') || '—'}
+                </p>
               </div>
               <Badge status={member.status} />
             </div>
@@ -258,7 +260,7 @@ export default function ParticipantDashboard() {
             <div className="space-y-3">
               {[
                 { label: '이름', key: 'name', placeholder: '홍길동', required: true },
-                { label: '사번', key: 'employeeId', placeholder: 'A123456', required: true },
+                { label: '사번', key: 'employeeId', placeholder: 'D123456', required: true },
                 { label: '부서', key: 'department', placeholder: '개발팀', required: false },
                 { label: '직급', key: 'position', placeholder: '대리', required: false },
               ].map(({ label, key, placeholder, required }) => (

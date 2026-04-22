@@ -106,7 +106,7 @@ Deno.serve(async (req: Request) => {
     // 사번 형식 검증: 알파벳 1자 + 숫자 6자리 (대소문자 무관)
     const rawId = employee_id as string;
     if (!/^[A-Za-z][0-9]{6}$/.test(rawId)) {
-      return json({ error: "사번 형식이 올바르지 않습니다. (알파벳 1자 + 숫자 6자리, 예: A123456)" }, 400);
+      return json({ error: "사번 형식이 올바르지 않습니다. (예: D123456)" }, 400);
     }
     // 대문자로 정규화
     const normalizedId = rawId.toUpperCase();
@@ -214,7 +214,7 @@ Deno.serve(async (req: Request) => {
     if (employee_id !== undefined) {
       const rawId = employee_id as string;
       if (!/^[A-Za-z][0-9]{6}$/.test(rawId)) {
-        return json({ error: "사번 형식이 올바르지 않습니다. (알파벳 1자 + 숫자 6자리, 예: A123456)" }, 400);
+        return json({ error: "사번 형식이 올바르지 않습니다. (예: D123456)" }, 400);
       }
       updatedEmployeeId = rawId.toUpperCase();
       updatedEmail = `${updatedEmployeeId}@hackathon.com`;

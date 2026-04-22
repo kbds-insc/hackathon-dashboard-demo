@@ -6,6 +6,7 @@ import {
   Lock,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   Shuffle,
   Trash2,
@@ -206,7 +207,7 @@ function validateParticipantDraft(
   if (!draft.form.employeeId.trim()) {
     nextErrors.employeeId = '사번을 입력해 주세요.';
   } else if (!EMPLOYEE_ID_REGEX.test(draft.form.employeeId.trim())) {
-    nextErrors.employeeId = '사번 형식이 올바르지 않습니다. (알파벳 1자 + 숫자 6자리, 예: A123456)';
+    nextErrors.employeeId = '사번 형식이 올바르지 않습니다. (예: D123456)';
   } else {
     const idUpper = draft.form.employeeId.trim().toUpperCase();
     const isDuplicate = existingParticipants.some(
@@ -277,7 +278,7 @@ function mergeParticipants(baseParticipants: Participant[], optimisticParticipan
 }
 
 export default function Participants() {
-  const { data: participants } = useParticipants();
+  const { data: participants, refetch: refetchParticipants } = useParticipants();
   const teams = useTeams();
 
   const [tab, setTab] = useState<Tab>('participants');
@@ -289,6 +290,7 @@ export default function Participants() {
   const [optimisticTeams, setOptimisticTeams] = useState<Team[]>([]);
   const [draftCounter, setDraftCounter] = useState(0);
   const [savingParticipants, setSavingParticipants] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [tModal, setTModal] = useState<
     { mode: 'add' } | { mode: 'edit'; id: string } | null
   >(null);
@@ -400,6 +402,29 @@ export default function Participants() {
 
   const hideToast = () => setToast((prev) => ({ ...prev, visible: false }));
 
+  const handleRefetch = () => {
+    const doRefetch = async () => {
+      setRefreshing(true);
+      try {
+        await refetchParticipants();
+        setNewRows([]);
+        setEditRows({});
+      } finally {
+        setRefreshing(false);
+      }
+    };
+
+    if (openDraftCount > 0) {
+      setConfirmDialog({
+        message: '등록/수정 중인 내용이 모두 사라집니다. 참가자를 재조회 하시겠습니까?',
+        confirmLabel: '재조회',
+        onConfirm: doRefetch,
+      });
+    } else {
+      doRefetch();
+    }
+  };
+
   const xlsxInputRef = useRef<HTMLInputElement>(null);
 
   const addParticipantRow = () => {
@@ -467,10 +492,16 @@ export default function Participants() {
   };
 
   const hasLeaderInTeam = (teamId: string, draft: ParticipantDraftRow) => {
+    // edit draft가 열린 참가자는 draft 값이 최신이므로 저장값 대신 draft로 판단
+    const editedIds = new Set(
+      Object.values(editRows).map((d) => d.id).filter(Boolean)
+    );
+
     const hasSavedLeader = displayParticipants.some(
       (participant) =>
         participant.id !== draft.id &&
         participant.team === teamId &&
+        !editedIds.has(participant.id) && // edit draft 있는 참가자는 hasDraftLeader에서 처리
         participant.isLeader
     );
     const hasDraftLeader = [...newRows, ...Object.values(editRows)].some(
@@ -1097,6 +1128,8 @@ export default function Participants() {
           onToggleIsLeader={toggleDraftIsLeader}
           onCancelDraft={cancelDraft}
           onSaveAll={handleSaveParticipants}
+          onRefetch={handleRefetch}
+          refreshing={refreshing}
           savingParticipants={savingParticipants}
           openDraftCount={openDraftCount}
           xlsxInputRef={xlsxInputRef}
@@ -1531,6 +1564,8 @@ function ParticipantsTab({
   onToggleIsLeader,
   onCancelDraft,
   onSaveAll,
+  onRefetch,
+  refreshing,
   savingParticipants,
   openDraftCount,
   xlsxInputRef,
@@ -1556,6 +1591,8 @@ function ParticipantsTab({
   onToggleIsLeader: (key: string) => void;
   onCancelDraft: (key: string) => void;
   onSaveAll: () => void;
+  onRefetch: () => void;
+  refreshing: boolean;
   savingParticipants: boolean;
   openDraftCount: number;
   xlsxInputRef: React.RefObject<HTMLInputElement | null>;
@@ -1585,6 +1622,14 @@ function ParticipantsTab({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={onRefetch}
+            disabled={refreshing || savingParticipants}
+            title="참가자 재조회"
+            className="rounded-lg border border-gray-200 p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
           <button
             onClick={onSaveAll}
             disabled={!hasDrafts || savingParticipants}
@@ -1618,6 +1663,12 @@ function ParticipantsTab({
         </div>
       </div>
 
+      <div className="relative">
+        {savingParticipants && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white/40 backdrop-blur-[2px]">
+            <p className="text-sm font-medium text-gray-500">저장 중...</p>
+          </div>
+        )}
       <Card>
         <div className="mb-3 flex items-center justify-between gap-3 text-xs text-gray-500">
           <p>좌우 스크롤로 전체 내용 확인</p>
@@ -1739,6 +1790,7 @@ function ParticipantsTab({
           <p className="py-10 text-center text-sm text-gray-400">검색 결과가 없습니다.</p>
         )}
       </Card>
+      </div>
     </>
   );
 }
@@ -1803,7 +1855,7 @@ function ParticipantEditableRow({
           value={draft.form.employeeId}
           onChange={(event) => onDraftChange(draft.key, 'employeeId', event.target.value)}
           className={tableInputClass(!!draft.errors.employeeId)}
-          placeholder="A123456"
+          placeholder="D123456"
         />
         {draft.errors.employeeId && (
           <p className="mt-1 text-xs text-red-500">{draft.errors.employeeId}</p>

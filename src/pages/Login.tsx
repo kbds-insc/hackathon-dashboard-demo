@@ -26,13 +26,15 @@ export default function Login() {
     e.preventDefault();
     setError(null);
 
-    if (!/^[A-Za-z][0-9]{6}$/.test(employeeId.trim())) {
-      setError('사번 형식이 올바르지 않습니다. (알파벳 1자 + 숫자 6자리, 예: A123456)');
+    const trimmedId = employeeId.trim();
+    const isSpecialAccount = /^(admin|judge)/i.test(trimmedId);
+    if (!isSpecialAccount && !/^[A-Za-z][0-9]{6}$/.test(trimmedId)) {
+      setError('사번 형식이 올바르지 않습니다. (예: D123456)');
       return;
     }
 
     setLoading(true);
-    const { error: err } = await signIn(employeeId.trim(), password);
+    const { error: err } = await signIn(trimmedId, password);
     if (err) {
       setError('사번 또는 비밀번호가 올바르지 않습니다.');
       setLoading(false);
@@ -70,7 +72,7 @@ export default function Login() {
                 autoComplete="username"
                 value={employeeId}
                 onChange={(e) => setEmployeeId(e.target.value)}
-                placeholder="A123456"
+                placeholder="D123456"
                 className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#80766b]/30 focus:border-[#80766b] transition-colors"
               />
             </div>

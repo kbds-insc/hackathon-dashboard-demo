@@ -3,7 +3,7 @@
 export interface Participant {
   id: string;
   name: string;
-  employeeId: string; // 사번: 알파벳 1자(대소문자 무관) + 숫자 6자리, 예: A123456
+  employeeId: string; // 사번: 알파벳 1자(대소문자 무관) + 숫자 6자리, 예: D123456
   team: string;
   status: 'approved' | 'pending' | 'rejected';
   department: string;

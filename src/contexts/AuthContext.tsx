@@ -9,7 +9,7 @@ export type UserRole = 'admin' | 'judge' | 'participant';
 
 export interface AuthUser {
   id: string;
-  employeeId: string; // 사번: 알파벳 1자 + 숫자 6자리 (대문자 정규화), 예: A123456
+  employeeId: string; // 사번: 알파벳 1자 + 숫자 6자리 (대문자 정규화), 예: D123456
   role: UserRole;
   name: string;
   mustChangePassword: boolean;

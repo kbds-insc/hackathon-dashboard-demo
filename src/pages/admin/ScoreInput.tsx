@@ -17,6 +17,57 @@ import { ArrowLeft, AlertCircle, Save, CheckCircle2 } from 'lucide-react';
 type TeamDraft = { creativity: number; practicality: number; completion: number; presentation: number };
 type DraftScores = Record<string, TeamDraft>;
 
+function ScoreNumberInput({
+  value,
+  max,
+  disabled,
+  onChange,
+  className,
+}: {
+  value: number;
+  max: number;
+  disabled: boolean;
+  onChange: (val: number) => void;
+  className: string;
+}) {
+  const [display, setDisplay] = useState(String(value));
+  const [isFocused, setIsFocused] = useState(false);
+  const [prevValue, setPrevValue] = useState(value);
+
+  // getDerivedStateFromProps 패턴: 포커스 중이 아닐 때만 외부 값 변경 반영
+  if (prevValue !== value) {
+    setPrevValue(value);
+    if (!isFocused) setDisplay(String(value));
+  }
+
+  return (
+    <input
+      type="number"
+      min={0}
+      max={max}
+      value={display}
+      disabled={disabled}
+      onFocus={() => {
+        setIsFocused(true);
+        if (display === '0') setDisplay('');
+      }}
+      onBlur={() => {
+        setIsFocused(false);
+        const num = Math.min(max, Math.max(0, parseInt(display, 10) || 0));
+        setDisplay(String(num));
+        onChange(num);
+      }}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setDisplay(raw);
+        const num = parseInt(raw, 10);
+        if (!isNaN(num)) onChange(Math.min(max, Math.max(0, num)));
+      }}
+      className={className}
+    />
+  );
+}
+
 function buildDraft(scores: JudgeScore[]): DraftScores {
   return Object.fromEntries(
     scores.map((s) => [
@@ -47,13 +98,12 @@ export default function ScoreInput() {
 
   const [draft, setDraft] = useState<DraftScores>({});
   const [saved, setSaved] = useState<Set<string>>(new Set());
+  // 서버 데이터 위에 로컬 변경분만 덮어씌움 — 다른 팀 점수에 영향 없음
   const effectiveDraft = useMemo(
-    () => (Object.keys(draft).length > 0 ? draft : buildDraft(judgeScores)),
+    () => ({ ...buildDraft(judgeScores), ...draft }),
     [draft, judgeScores]
   );
   const isHydrated = judgeScores.length > 0;
-
-  // judgeScores는 비동기로 로드되므로 첫 데이터 도착 시 한 번만 draft를 초기화
 
   const setField = (
     teamId: string,
@@ -81,8 +131,9 @@ export default function ScoreInput() {
     const d = effectiveDraft[teamId] ?? { creativity: 0, practicality: 0, completion: 0, presentation: 0 };
     try {
       await updateScore(judgeId, judgeName, teamId, d);
-      const refreshed = await refetchJudgeScores();
-      setDraft(buildDraft(refreshed));
+      await refetchJudgeScores();
+      // 저장된 팀만 draft에서 제거 — 다른 팀의 미저장 변경값 유지
+      setDraft((prev) => { const next = { ...prev }; delete next[teamId]; return next; });
       setSaved((prev) => new Set(prev).add(teamId));
     } catch {
       console.error('점수 저장 실패');
@@ -97,8 +148,8 @@ export default function ScoreInput() {
           return updateScore(judgeId, judgeName, t.id, d);
         })
       );
-      const refreshed = await refetchJudgeScores();
-      setDraft(buildDraft(refreshed));
+      await refetchJudgeScores();
+      setDraft({});
       setSaved(new Set(teams.map((t) => t.id)));
     } catch {
       console.error('전체 점수 저장 실패');
@@ -211,13 +262,11 @@ export default function ScoreInput() {
                       <td className="py-3.5 pr-4 font-medium text-gray-800">{team.name}</td>
                       {SCORE_CRITERIA.map((c) => (
                         <td key={c.key} className="py-3.5 pr-4">
-                          <input
-                            type="number"
-                            min={0}
-                            max={criteriaMax[c.key]}
+                          <ScoreNumberInput
                             value={d[c.key]}
+                            max={criteriaMax[c.key]}
                             disabled={!judgingOpen}
-                            onChange={(e) => setField(team.id, c.key, e.target.value)}
+                            onChange={(val) => setField(team.id, c.key, String(val))}
                             className="w-20 px-2 py-1.5 text-center text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#80766b]/30 disabled:bg-gray-50 disabled:text-gray-400"
                           />
                         </td>
@@ -272,13 +321,11 @@ export default function ScoreInput() {
                   <div key={c.key} className="flex items-center gap-3">
                     <span className="text-sm text-gray-600 w-14 shrink-0">{c.label}</span>
                     <div className="flex-1 flex items-center gap-2">
-                      <input
-                        type="number"
-                        min={0}
-                        max={criteriaMax[c.key]}
+                      <ScoreNumberInput
                         value={d[c.key]}
+                        max={criteriaMax[c.key]}
                         disabled={!judgingOpen}
-                        onChange={(e) => setField(team.id, c.key, e.target.value)}
+                        onChange={(val) => setField(team.id, c.key, String(val))}
                         className="w-20 px-3 py-2 text-center text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#80766b]/30 disabled:bg-gray-50 disabled:text-gray-400"
                       />
                       <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
