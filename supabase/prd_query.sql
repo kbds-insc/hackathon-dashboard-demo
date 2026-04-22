@@ -289,24 +289,34 @@ CREATE POLICY "leader_update" ON submissions
 -- 사번 형식: 알파벳 1자(대소문자 무관) + 숫자 6자리, 저장 시 대문자 정규화
 -- ============================================================
 
--- 1. participants 테이블에 employee_id 컬럼 추가
+-- 1. participants 테이블에 employee_id 컬럼 추가 (nullable — constraint는 마지막에 추가)
 ALTER TABLE participants
-  ADD COLUMN IF NOT EXISTS employee_id text NOT NULL DEFAULT '';
+  ADD COLUMN IF NOT EXISTS employee_id text;
 
--- 2. 기존 @hackathon.com 계정: email에서 사번 추출 후 대문자 정규화
+-- 2. DEFAULT '' 이 남아있는 경우 제거 (재실행 안전)
+ALTER TABLE participants ALTER COLUMN employee_id DROP DEFAULT;
+
+-- 3. 기존 @hackathon.com 계정: email에서 사번 추출 후 대문자 정규화
 UPDATE participants
   SET employee_id = upper(split_part(email, '@', 1))
-  WHERE email LIKE '%@hackathon.com'
-    AND employee_id = '';
+  WHERE email LIKE '%@hackathon.com';
 
--- 3. 형식 CHECK constraint (대문자 정규화 후 적용)
+-- 4. 빈 문자열('') 잔재를 NULL로 정리 (이전 실행에서 DEFAULT ''가 들어간 경우)
+UPDATE participants
+  SET employee_id = NULL
+  WHERE employee_id = '';
+
+-- 5. 형식 CHECK constraint 추가
+--    PostgreSQL에서 NULL은 CHECK를 통과 → 기존 미변환 행(NULL)은 위반 없음
+--    신규 등록은 Edge Function이 항상 유효한 사번을 삽입
 ALTER TABLE participants
   ADD CONSTRAINT chk_employee_id
   CHECK (employee_id ~ '^[A-Z][0-9]{6}$');
 
--- 4. employee_id 중복 방지 인덱스 (대문자 정규화 저장 기준)
+-- 6. employee_id 중복 방지 인덱스 (NULL 제외)
 CREATE UNIQUE INDEX IF NOT EXISTS participants_employee_id_idx
-  ON participants(employee_id);
+  ON participants(employee_id)
+  WHERE employee_id IS NOT NULL;
 
 -- ============================================================
 -- (운영) admin / judge auth 계정 email 변경
