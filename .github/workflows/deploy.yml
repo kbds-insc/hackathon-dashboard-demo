@@ -18,7 +18,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          node-version: '20.19.0'
+          cache: 'npm'
+          
+      - name: Check Node version
+        run: |
+          node -v
+          npm -v
+          which node
+          
       - name: Install
         run: npm ci
 
@@ -48,7 +57,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          node-version: '20.19.0'
+          cache: 'npm'
 
+      - name: Check Node version
+        run: |
+          node -v
+          npm -v
+          which node
+          
       - name: Install
         run: npm ci
 
