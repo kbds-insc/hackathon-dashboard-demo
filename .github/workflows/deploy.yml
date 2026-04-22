@@ -1,0 +1,95 @@
+name: Deploy (dev/prd)
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy-dev:
+    if: github.ref_name == 'dev'
+    runs-on: [self-hosted, linux]
+    environment: development
+
+    env:
+      APP_DIR: /var/www/hackathon-dev
+
+    steps:      
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.0'
+          cache: 'npm'
+          
+      - name: Check Node version
+        run: |
+          node -v
+          npm -v
+          which node
+          
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: npm run build
+
+      - name: Deploy
+        run: |
+          rm -rf "${APP_DIR:?}"/*
+          cp -r dist/* "${APP_DIR}/"
+
+      - name: Reload nginx
+        run: |
+          sudo nginx -t
+          sudo systemctl reload nginx
+
+  deploy-prd:
+    if: github.ref_name == 'main'
+    runs-on: [self-hosted, linux]
+    environment: production
+
+    env:
+      APP_DIR: /var/www/hackathon-prd
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.0'
+          cache: 'npm'
+
+      - name: Check Node version
+        run: |
+          node -v
+          npm -v
+          which node
+          
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: npm run build
+
+      - name: Deploy
+        run: |
+          rm -rf "${APP_DIR:?}"/*
+          cp -r dist/* "${APP_DIR}/"
+
+      - name: Reload nginx
+        run: |
+          sudo nginx -t
+          sudo systemctl reload nginx
