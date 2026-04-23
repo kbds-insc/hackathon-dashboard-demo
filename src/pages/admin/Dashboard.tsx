@@ -8,7 +8,22 @@ import { useParticipants } from '../../hooks/useParticipants';
 import { useScores } from '../../hooks/useScores';
 import { useSettings } from '../../hooks/useSettings';
 import { useNotices } from '../../hooks/useNotices';
-import { Users, Flag, FileCheck, Trophy } from 'lucide-react';
+import { useMilestones } from '../../hooks/useMilestones';
+import { Users, Flag, FileCheck, Trophy, ChevronRight } from 'lucide-react';
+
+function getDday(dateStr: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr);
+  target.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function formatDday(days: number): string {
+  if (days === 0) return 'D-Day';
+  if (days > 0) return `D-${days}`;
+  return `D+${Math.abs(days)}`;
+}
 
 export default function Dashboard() {
   const teams = useTeams();
@@ -16,6 +31,15 @@ export default function Dashboard() {
   const scores = useScores();
   const settings = useSettings();
   const { data: notices } = useNotices();
+  const { data: allMilestones } = useMilestones();
+
+  const milestones = allMilestones;
+  const doneMilestones = milestones.filter((m) => m.isDone);
+  const upcomingMilestones = milestones.filter((m) => !m.isDone);
+  const currentIdx = milestones.findIndex((m) => !m.isDone);
+  const nextMilestone = currentIdx !== -1 ? milestones[currentIdx] : null;
+  const ddayValue = nextMilestone ? getDday(nextMilestone.date) : null;
+  const progress = milestones.length > 0 ? Math.round((doneMilestones.length / milestones.length) * 100) : 0;
 
   const submittedCount = teams.filter((t) => t.submitStatus === 'submitted').length;
   const scoredCount = scores.filter((s) => s.total > 0).length;
@@ -135,38 +159,116 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
-        {/* ── 팀별 제출 현황 ── */}
-        <Card title="팀별 제출 현황" className="order-2 lg:order-1">
-          <div className="max-h-[460px] overflow-y-auto pr-1">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-              {teams.map((team) => {
-                const submitted = team.submitStatus === 'submitted';
-                return (
-                  <div
-                    key={team.id}
-                    className={`rounded-xl border p-4 flex items-center justify-between gap-3 transition-colors ${
-                      submitted
-                        ? 'bg-indigo-50 border-indigo-200'
-                        : 'bg-gray-50 border-gray-200'
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <p className={`text-sm font-semibold truncate ${submitted ? 'text-indigo-800' : 'text-gray-700'}`}>
-                        {team.name}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-0.5">팀원 {team.members.length}명</p>
-                    </div>
-                    <Badge status={team.submitStatus} />
+      {/* ── 다음 일정 + 최근 공지사항 (PC: 2열) ── */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 mb-6">
+        {/* 다음 일정 */}
+        <Card title="다음 일정">
+          {nextMilestone && ddayValue !== null ? (
+            <>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-gray-700 truncate">{nextMilestone.title}</p>
+                    {!nextMilestone.isPublic && (
+                      <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-400">비공개</span>
+                    )}
                   </div>
-                );
-              })}
+                  <p className="text-xs text-gray-400 mt-0.5">{nextMilestone.date}</p>
+                </div>
+                <span className="text-3xl font-black text-indigo-600 shrink-0 tabular-nums">
+                  {formatDday(ddayValue)}
+                </span>
+              </div>
+              {/* 모바일: 가로 점 인디케이터 */}
+            <div className="flex items-center lg:hidden">
+                {milestones.map((m, i) => (
+                  <div
+                    key={m.id}
+                    className={`flex items-center ${i < milestones.length - 1 ? 'flex-1' : ''}`}
+                  >
+                    <div
+                      className={`w-2.5 h-2.5 rounded-full shrink-0 transition-colors ${
+                        m.isDone
+                          ? 'bg-emerald-500'
+                          : i === currentIdx
+                          ? 'bg-indigo-500 ring-2 ring-indigo-200 ring-offset-1'
+                          : 'bg-gray-200'
+                      }`}
+                    />
+                    {i < milestones.length - 1 && (
+                      <div className={`flex-1 h-px ${m.isDone ? 'bg-emerald-300' : 'bg-gray-200'}`} />
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* PC: 세로 리스트 (진행 중 + 앞으로 일정만, 최대 4개) */}
+              {upcomingMilestones.length > 0 ? (
+                <ol className="hidden lg:block">
+                  {upcomingMilestones.slice(0, 4).map((m, i) => {
+                    const isCurrent = i === 0;
+                    const visibleCount = Math.min(upcomingMilestones.length, 4);
+                    const isLast = i === visibleCount - 1;
+                    return (
+                      <li key={m.id} className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <div
+                            className={`w-3 h-3 rounded-full border-2 shrink-0 mt-0.5 flex items-center justify-center ${
+                              isCurrent
+                                ? 'border-indigo-500 bg-white ring-2 ring-indigo-100'
+                                : 'border-gray-300 bg-white'
+                            }`}
+                          >
+                            {isCurrent && <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" />}
+                          </div>
+                          {!isLast && <div className="w-0.5 flex-1 bg-gray-200 my-1 min-h-[10px]" />}
+                        </div>
+                        <div className={`flex-1 min-w-0 ${isLast ? 'pb-0' : 'pb-2.5'}`}>
+                          <p className="text-[11px] text-gray-400">{m.date}</p>
+                          <p className={`text-sm font-medium mt-0.5 truncate ${isCurrent ? 'text-indigo-700' : 'text-gray-600'}`}>
+                            {m.title}
+                          </p>
+                        </div>
+                      </li>
+                    );
+                  })}
+                  {upcomingMilestones.length > 4 && (
+                    <li className="flex gap-3 mt-1">
+                      <div className="w-3 shrink-0" />
+                      <p className="text-xs text-gray-400">외 {upcomingMilestones.length - 4}개 일정</p>
+                    </li>
+                  )}
+                </ol>
+              ) : (
+                <p className="hidden lg:block text-sm text-gray-400 text-center py-2">앞으로 남은 일정이 없습니다.</p>
+              )}
+
+              <div className="flex items-center justify-between text-xs text-gray-400 mt-3">
+                <span>{doneMilestones.length}/{milestones.length} 완료 · {progress}%</span>
+                <Link
+                  to="/admin/milestones"
+                  className="flex items-center gap-0.5 font-medium text-[#80766b] hover:text-[#6e645a] transition-colors"
+                >
+                  전체 보기 <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-2xl mb-2">🎉</p>
+              <p className="text-sm font-semibold text-gray-700">모든 일정이 완료됐습니다!</p>
+              <Link
+                to="/admin/milestones"
+                className="mt-2 inline-flex items-center gap-0.5 text-xs font-medium text-[#80766b] hover:text-[#6e645a] transition-colors"
+              >
+                일정 확인 <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
-          </div>
+          )}
         </Card>
 
-        {/* ── 최근 공지사항 ── */}
-        <Card title="최근 공지사항" className="order-1 lg:order-2">
+        {/* 최근 공지사항 */}
+        <Card title="최근 공지사항">
           <ul className="divide-y divide-gray-100 lg:hidden">
             {mobileRecentNotices.map((notice) => (
               <li key={notice.id} className="py-3 first:pt-0 last:pb-0">
@@ -181,7 +283,6 @@ export default function Dashboard() {
               </li>
             ))}
           </ul>
-
           <ul className="hidden divide-y divide-gray-100 lg:block">
             {recentNotices.map((notice) => (
               <li key={notice.id} className="py-3 first:pt-0 last:pb-0">
@@ -198,6 +299,43 @@ export default function Dashboard() {
           </ul>
         </Card>
       </div>
+
+      {/* ── 팀별 제출 현황 ── */}
+      <Card
+        title="팀별 제출 현황"
+        headerRight={
+          <Link
+            to="/admin/submissions"
+            className="flex items-center gap-0.5 text-xs font-medium text-[#80766b] hover:text-[#6e645a] transition-colors"
+          >
+            제출 관리 <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+        }
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {teams.map((team) => {
+            const submitted = team.submitStatus === 'submitted';
+            return (
+              <div
+                key={team.id}
+                className={`rounded-xl border p-4 flex items-center justify-between gap-3 transition-colors ${
+                  submitted
+                    ? 'bg-indigo-50 border-indigo-200'
+                    : 'bg-gray-50 border-gray-200'
+                }`}
+              >
+                <div className="min-w-0">
+                  <p className={`text-sm font-semibold truncate ${submitted ? 'text-indigo-800' : 'text-gray-700'}`}>
+                    {team.name}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">팀원 {team.members.length}명</p>
+                </div>
+                <Badge status={team.submitStatus} />
+              </div>
+            );
+          })}
+        </div>
+      </Card>
     </AdminLayout>
   );
 }

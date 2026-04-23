@@ -15,6 +15,7 @@ import ScoreInput from './pages/admin/ScoreInput';
 import AdminSettings from './pages/admin/Settings';
 // Participant pages
 import ParticipantDashboard from './pages/participant/Dashboard';
+import ParticipantTeam from './pages/participant/Team';
 import Timeline from './pages/participant/Timeline';
 import ParticipantNotices from './pages/participant/Notices';
 import Submit from './pages/participant/Submit';
@@ -116,6 +117,14 @@ export default function App() {
             element={
               <ProtectedRoute roles={['participant']}>
                 <ParticipantDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/participant/team"
+            element={
+              <ProtectedRoute roles={['participant']}>
+                <ParticipantTeam />
               </ProtectedRoute>
             }
           />

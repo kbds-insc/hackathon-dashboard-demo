@@ -1,52 +1,60 @@
-import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import ParticipantLayout from '../../components/layout/ParticipantLayout';
 import Card from '../../components/ui/Card';
-import Badge from '../../components/ui/Badge';
-import { useParticipants } from '../../hooks/useParticipants';
 import { useCurrentParticipant } from '../../hooks/useCurrentParticipant';
+import { useParticipants } from '../../hooks/useParticipants';
+import { useNotices } from '../../hooks/useNotices';
+import { useMilestones } from '../../hooks/useMilestones';
 import { useScores } from '../../hooks/useScores';
 import { useSettings } from '../../hooks/useSettings';
-import { CheckCircle2, Clock, Crown, Lock, Plus, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { createParticipantWithAuth } from '../../data/hackathonStore';
+import { Crown, Trophy, ChevronRight, CheckCircle2, Clock } from 'lucide-react';
 
-function Initials({ name }: { name: string }) {
-  return (
-    <div className="w-9 h-9 rounded-full bg-[#80766b]/10 flex items-center justify-center text-[#80766b] font-bold text-sm shrink-0">
-      {name.slice(0, 1)}
-    </div>
-  );
+function getDday(dateStr: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr);
+  target.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-interface AddMemberForm {
-  name: string;
-  employeeId: string;
-  department: string;
-  position: string;
+function formatDday(days: number): string {
+  if (days === 0) return 'D-Day';
+  if (days > 0) return `D-${days}`;
+  return `D+${Math.abs(days)}`;
 }
-
-const EMPTY_FORM: AddMemberForm = { name: '', employeeId: '', department: '', position: '' };
-const MAX_TEAM_MEMBERS = 5;
-const TEAM_MEMBER_LIMIT_MESSAGE = `팀은 최대 ${MAX_TEAM_MEMBERS}명까지 구성할 수 있습니다.`;
 
 export default function ParticipantDashboard() {
-  const { data: participants, upsertLocal } = useParticipants();
-  const { participant, team, loading } = useCurrentParticipant();
+  const { team, loading } = useCurrentParticipant();
+  const { data: allParticipants } = useParticipants();
+  const { data: notices } = useNotices();
+  const { data: allMilestones } = useMilestones();
   const allScores = useScores();
   const settings = useSettings();
 
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showLockAlert, setShowLockAlert] = useState(false);
-  const [form, setForm] = useState<AddMemberForm>(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+  // 팀원 목록
+  const teamMembers = team ? allParticipants.filter((p) => p.team === team.id) : [];
 
-  const isLeader = participant?.isLeader ?? false;
-  const isLocked = team?.locked ?? false;
+  // 다음 일정
+  const milestones = allMilestones.filter((m) => m.isPublic);
+  const doneMilestones = milestones.filter((m) => m.isDone);
+  const currentIdx = milestones.findIndex((m) => !m.isDone);
+  const nextMilestone = currentIdx !== -1 ? milestones[currentIdx] : null;
+  const ddayValue = nextMilestone ? getDday(nextMilestone.date) : null;
+  const progress = milestones.length > 0 ? Math.round((doneMilestones.length / milestones.length) * 100) : 0;
 
-  const myMembers = team
-    ? participants.filter((p) => p.team === team.id)
-    : [];
+  // 최근 공지사항
+  const recentNotices = [...notices].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
+  const d = new Date();
+  const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  // 평가 결과
+  const myScore = team ? allScores.find((s) => s.teamId === team.id) : undefined;
+  const scoredTeams = allScores.filter((s) => s.judgeCount > 0).sort((a, b) => b.total - a.total);
+  const myRank =
+    myScore && myScore.judgeCount > 0
+      ? scoredTeams.filter((s) => s.total > myScore.total).length + 1
+      : null;
+  const evaluationDone = settings.scoresPublished && myScore && myScore.judgeCount > 0;
 
   if (loading) {
     return (
@@ -56,248 +64,228 @@ export default function ParticipantDashboard() {
     );
   }
 
-  if (!team) {
-    return (
-      <ParticipantLayout>
-        <p className="text-sm text-gray-400 text-center py-10">아직 지정된 팀이 없습니다.</p>
-      </ParticipantLayout>
-    );
-  }
-
-  const submitStatus = team.submit_status;
-  const submitted = submitStatus === 'submitted';
-
-  const myScore = allScores.find((s) => s.teamId === team.id);
-  const isEvaluated = settings.scoresPublished && !!myScore && myScore.judgeCount > 0;
-  const displayBadgeStatus = isEvaluated ? 'evaluated' : submitStatus;
-
-  const openAddModal = () => {
-    if (myMembers.length >= MAX_TEAM_MEMBERS) {
-      setError(TEAM_MEMBER_LIMIT_MESSAGE);
-      setShowAddModal(true);
-      return;
-    }
-
-    setForm(EMPTY_FORM);
-    setError('');
-    setShowAddModal(true);
-  };
-
-  const handleAddMember = async () => {
-    if (!form.name.trim() || !form.employeeId.trim()) {
-      setError('이름과 사번은 필수입니다.');
-      return;
-    }
-    if (!/^[A-Za-z][0-9]{6}$/.test(form.employeeId.trim())) {
-      setError('사번 형식이 올바르지 않습니다. (예: D123456)');
-      return;
-    }
-    if (myMembers.length >= MAX_TEAM_MEMBERS) {
-      setError(TEAM_MEMBER_LIMIT_MESSAGE);
-      return;
-    }
-    const idUpper = form.employeeId.trim().toUpperCase();
-    if (participants.some((p) => p.employeeId.toUpperCase() === idUpper)) {
-      setError('이미 등록된 사번입니다.');
-      return;
-    }
-
-    setSaving(true);
-    setError('');
-    try {
-      const createdParticipant = await createParticipantWithAuth({
-        name: form.name.trim(),
-        employeeId: form.employeeId.trim(),
-        department: form.department.trim(),
-        position: form.position.trim(),
-        team: team.id,
-        status: 'pending',
-        isLeader: false,
-      });
-      upsertLocal(createdParticipant);
-      setShowAddModal(false);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '팀원 추가에 실패했습니다.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <ParticipantLayout>
-      {/* ── 팀 헤더 카드 ── */}
-      <Card className="mb-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-800">{team.name}</h1>
-            <p className="text-sm text-gray-400 mt-0.5">팀원 {myMembers.length}명</p>
-          </div>
-          <Badge status={displayBadgeStatus} />
-        </div>
-        {isEvaluated && (
-          <p className="mt-3 pt-3 border-t border-gray-100 text-xs text-indigo-600">
-            <Link to="/participant/scores" className="font-medium underline underline-offset-2">
-              🏆 심사가 완료됐어요. 우리 팀 순위 보러 가기
-            </Link>
-          </p>
-        )}
-      </Card>
-
-      {/* ── 팀원 목록 ── */}
-      <Card
-        title="팀원 목록"
-        className="mb-5"
-        headerRight={
-          isLeader ? (
-            <button
-              onClick={isLocked ? () => setShowLockAlert(true) : openAddModal}
-              disabled={false}
-              className={`flex items-center gap-1 text-xs font-medium ${
-                isLocked
-                  ? 'text-gray-400 cursor-not-allowed'
-                  : 'text-[#80766b] hover:text-[#6e645a]'
-              }`}
-            >
-              {isLocked ? <Lock className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-              팀원 추가
-            </button>
-          ) : undefined
-        }
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {myMembers.map((member) => (
-            <div
-              key={member.id}
-              className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl"
-            >
-              <Initials name={member.name} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-medium text-gray-800">{member.name}</p>
-                  {member.isLeader && (
-                    <span className="inline-flex items-center gap-0.5 rounded-md bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700">
-                      <Crown className="w-3 h-3" />
-                      팀장
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-gray-400 truncate">
-                  {[member.department, member.position].filter(Boolean).join(' · ') || '—'}
-                </p>
-              </div>
-              <Badge status={member.status} />
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* ── 팀 아이디어 ── */}
-      <Card title="팀 아이디어" className="mb-5">
-        <p className="text-sm text-gray-600 leading-relaxed">{team.idea}</p>
-      </Card>
-
-      {/* ── 제출 현황 요약 ── */}
-      <Card title="제출 현황" className="mb-5">
+      {/* ── 평가 완료 배너 ── */}
+      {evaluationDone && myRank !== null && (
         <div
-          className={`flex items-center gap-4 p-4 rounded-xl border ${
-            submitted
-              ? 'bg-green-50 border-green-100'
-              : 'bg-gray-50 border-gray-200'
+          className={`mb-5 rounded-2xl p-5 border ${
+            myRank <= 3 ? 'bg-emerald-50 border-emerald-200' : 'bg-blue-50 border-blue-100'
           }`}
         >
-          {submitted ? (
-            <CheckCircle2 className="w-8 h-8 text-green-500 shrink-0" />
-          ) : (
-            <Clock className="w-8 h-8 text-gray-400 shrink-0" />
-          )}
-          <div>
-            <p className={`font-semibold ${submitted ? 'text-green-800' : 'text-gray-600'}`}>
-              {submitted ? '제출 완료' : '아직 제출하지 않았습니다'}
-            </p>
-            <p className={`text-xs mt-0.5 ${submitted ? 'text-green-600' : 'text-gray-400'}`}>
-              {submitted
-                ? '심사위원회에서 검토 중입니다.'
-                : '제출하기 메뉴에서 결과물을 제출해주세요.'}
-            </p>
+          <div className="flex items-center gap-2 mb-2">
+            <span
+              className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full ${
+                myRank <= 3 ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-600'
+              }`}
+            >
+              <CheckCircle2 className="w-3 h-3" />
+              평가완료
+            </span>
           </div>
-        </div>
-      </Card>
-
-      {/* ── 팀 잠금 알림 팝업 ── */}
-      {showLockAlert && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-            <div className="flex items-center gap-3 mb-4">
-              <Lock className="w-5 h-5 text-gray-500 shrink-0" />
-              <h2 className="text-base font-semibold text-gray-800">팀 잠금</h2>
+          <p className={`text-base font-bold ${myRank <= 3 ? 'text-emerald-700' : 'text-blue-700'}`}>
+            {myRank === 1
+              ? '🏆 심사가 완료됐어요! 대상을 수상하셨습니다!'
+              : myRank === 2
+              ? '🥈 심사가 완료됐어요! 최우수상을 수상하셨습니다!'
+              : myRank === 3
+              ? '🥉 심사가 완료됐어요! 우수상을 수상하셨습니다!'
+              : '🎉 심사가 완료됐어요! 수고 많으셨습니다!'}
+          </p>
+          <p className={`text-sm mt-1 ${myRank <= 3 ? 'text-emerald-600' : 'text-blue-500'}`}>
+            {myRank <= 3
+              ? myRank === 1
+                ? '최고의 아이디어와 실력으로 대상을 거머쥐었습니다. 진심으로 축하드립니다!'
+                : myRank === 2
+                ? '뛰어난 완성도와 열정이 빛났습니다. 진심으로 축하드립니다!'
+                : '창의력과 노력이 인정받았습니다. 진심으로 축하드립니다!'
+              : '짧은 시간 안에 아이디어를 현실로 만들어낸 경험 자체가 값진 성취입니다.'}
+          </p>
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-current/10">
+            <div className="flex items-center gap-2">
+              <Trophy className="w-4 h-4 text-amber-500" />
+              <span className="text-sm font-bold text-gray-700">
+                {myRank}위 · {myScore!.total}점
+              </span>
             </div>
-            <p className="text-sm text-gray-600 leading-relaxed">
-              잠금된 팀에는 팀원을 추가할 수 없습니다. 관리자에게 문의하세요.
-            </p>
-            <div className="mt-5 flex justify-end">
-              <button
-                onClick={() => setShowLockAlert(false)}
-                className="rounded-lg bg-[#80766b] px-4 py-2 text-sm font-medium text-white hover:bg-[#6e645a]"
-              >
-                확인
-              </button>
-            </div>
+            <Link
+              to="/participant/scores"
+              className="flex items-center gap-0.5 text-xs font-medium text-[#80766b] hover:text-[#6e645a] transition-colors"
+            >
+              자세히 보기 <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
           </div>
         </div>
       )}
 
-      {/* ── 팀원 추가 모달 (팀장 전용) ── */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-base font-semibold text-gray-800">팀원 추가</h2>
-              <button onClick={() => setShowAddModal(false)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      {/* ── ① 내 팀 정보 + ② 다음 일정 ── */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 mb-5">
+        {/* 내 팀 정보 */}
+        <Card title="내 팀">
+          {!team ? (
+            <p className="text-sm text-gray-400 text-center py-6">팀 배정 대기 중입니다.</p>
+          ) : (
+            <>
+              <p className="text-base font-bold text-gray-800 mb-3">{team.name}</p>
+              {teamMembers.length > 0 ? (
+                <ul className="space-y-2">
+                  {teamMembers.map((m) => (
+                    <li key={m.id} className="flex items-center gap-2 min-w-0">
+                      {m.isLeader ? (
+                        <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      ) : (
+                        <span className="w-3.5 h-3.5 shrink-0" />
+                      )}
+                      <span className="text-sm font-medium text-gray-700 truncate flex-1">{m.name}</span>
+                      {(m.department || m.position) && (
+                        <span className="text-xs text-gray-400 shrink-0">
+                          {[m.department, m.position].filter(Boolean).join(' · ')}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-gray-400">팀원 정보를 불러오는 중입니다.</p>
+              )}
+            </>
+          )}
+        </Card>
 
-            <div className="space-y-3">
-              {[
-                { label: '이름', key: 'name', placeholder: '홍길동', required: true },
-                { label: '사번', key: 'employeeId', placeholder: 'D123456', required: true },
-                { label: '부서', key: 'department', placeholder: '개발팀', required: false },
-                { label: '직급', key: 'position', placeholder: '대리', required: false },
-              ].map(({ label, key, placeholder, required }) => (
-                <div key={key}>
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                    {label}{required && <span className="ml-0.5 text-red-400">*</span>}
-                  </label>
-                  <input
-                    type="text"
-                    placeholder={placeholder}
-                    value={form[key as keyof AddMemberForm]}
-                    onChange={(e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))}
-                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#80766b]/30"
-                  />
+        {/* 다음 일정 D-day */}
+        <Card title="다음 일정">
+          {nextMilestone && ddayValue !== null ? (
+            <>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-700 truncate">{nextMilestone.title}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{nextMilestone.date}</p>
                 </div>
-              ))}
-            </div>
-
-            {error && <p className="mt-3 text-xs text-red-500">{error}</p>}
-
-            <div className="mt-5 flex gap-2 justify-end">
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="rounded-lg px-4 py-2 text-sm text-gray-600 hover:bg-gray-100"
+                <span className="text-3xl font-black text-indigo-600 shrink-0 tabular-nums">
+                  {formatDday(ddayValue)}
+                </span>
+              </div>
+              <div className="flex items-center mt-1">
+                {milestones.map((m, i) => (
+                  <div
+                    key={m.id}
+                    className={`flex items-center ${i < milestones.length - 1 ? 'flex-1' : ''}`}
+                  >
+                    <div
+                      className={`w-2.5 h-2.5 rounded-full shrink-0 transition-colors ${
+                        m.isDone
+                          ? 'bg-emerald-500'
+                          : i === currentIdx
+                          ? 'bg-indigo-500 ring-2 ring-indigo-200 ring-offset-1'
+                          : 'bg-gray-200'
+                      }`}
+                    />
+                    {i < milestones.length - 1 && (
+                      <div className={`flex-1 h-px ${m.isDone ? 'bg-emerald-300' : 'bg-gray-200'}`} />
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between text-xs text-gray-400 mt-2">
+                <span>{doneMilestones.length}/{milestones.length} 완료 · {progress}%</span>
+                <Link
+                  to="/participant/schedule"
+                  className="flex items-center gap-0.5 font-medium text-[#80766b] hover:text-[#6e645a] transition-colors"
+                >
+                  전체 보기 <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-2xl mb-2">🎉</p>
+              <p className="text-sm font-semibold text-gray-700">모든 일정이 완료됐습니다!</p>
+              <Link
+                to="/participant/schedule"
+                className="mt-2 inline-flex items-center gap-0.5 text-xs font-medium text-[#80766b] hover:text-[#6e645a] transition-colors"
               >
-                취소
-              </button>
-              <button
-                onClick={handleAddMember}
-                disabled={saving}
-                className="rounded-lg bg-[#80766b] px-4 py-2 text-sm font-medium text-white hover:bg-[#6e645a] disabled:opacity-40"
-              >
-                {saving ? '추가 중...' : '추가'}
-              </button>
+                일정 확인 <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
+          )}
+        </Card>
+      </div>
+
+      {/* ── ③ 최근 공지사항 ── */}
+      <Card
+        title="최근 공지사항"
+        className="mb-5"
+        headerRight={
+          <Link
+            to="/participant/notices"
+            className="flex items-center gap-0.5 text-xs font-medium text-[#80766b] hover:text-[#6e645a] transition-colors"
+          >
+            전체 보기 <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+        }
+      >
+        {recentNotices.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-4">등록된 공지사항이 없습니다.</p>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {recentNotices.map((notice) => (
+              <li key={notice.id} className="py-3 first:pt-0 last:pb-0">
+                <Link
+                  to={`/participant/notices#${notice.id}`}
+                  className="block hover:opacity-70 transition-opacity"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    {notice.date === todayStr && (
+                      <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500 text-white">
+                        NEW
+                      </span>
+                    )}
+                    <p className="text-sm font-medium text-gray-800 truncate">{notice.title}</p>
+                    <span className="text-xs text-gray-400 shrink-0 ml-auto">{notice.date}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1 line-clamp-1 whitespace-pre-line">
+                    {notice.content}
+                  </p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      {/* ── ④ 제출 현황 ── */}
+      {team && !evaluationDone && (
+        <Card title="제출 현황" className="mb-5">
+          <div
+            className={`flex items-center gap-4 p-4 rounded-xl border ${
+              team.submit_status === 'submitted'
+                ? 'bg-green-50 border-green-100'
+                : 'bg-gray-50 border-gray-200'
+            }`}
+          >
+            {team.submit_status === 'submitted' ? (
+              <CheckCircle2 className="w-8 h-8 text-green-500 shrink-0" />
+            ) : (
+              <Clock className="w-8 h-8 text-gray-400 shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className={`font-semibold ${team.submit_status === 'submitted' ? 'text-green-800' : 'text-gray-600'}`}>
+                {team.submit_status === 'submitted' ? '제출 완료' : '아직 제출하지 않았습니다'}
+              </p>
+              <p className={`text-xs mt-0.5 ${team.submit_status === 'submitted' ? 'text-green-600' : 'text-gray-400'}`}>
+                {team.submit_status === 'submitted'
+                  ? '심사위원회에서 검토 중입니다.'
+                  : '제출하기 메뉴에서 결과물을 제출해주세요.'}
+              </p>
+            </div>
+            <Link
+              to="/participant/submit"
+              className="flex items-center gap-0.5 text-xs font-medium text-[#80766b] hover:text-[#6e645a] transition-colors shrink-0"
+            >
+              {team.submit_status === 'submitted' ? '확인' : '제출하기'} <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
           </div>
-        </div>
+        </Card>
       )}
     </ParticipantLayout>
   );
