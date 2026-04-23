@@ -19,8 +19,8 @@ export default function ParticipantNotices() {
     if (!id || notices.length === 0 || lastScrolledHash.current === id) return;
     if (!notices.some((n) => n.id === id)) return;
     lastScrolledHash.current = id;
-    setExpanded((prev) => { const next = new Set(prev); next.add(id); return next; });
     setTimeout(() => {
+      setExpanded((prev) => { const next = new Set(prev); next.add(id); return next; });
       document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 50);
   }, [location.hash, notices]);
