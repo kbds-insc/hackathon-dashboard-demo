@@ -235,12 +235,7 @@ export default function Dashboard() {
                   {upcomingMilestones.length > 4 && (
                     <li className="flex gap-3 mt-1">
                       <div className="w-3 shrink-0" />
-                      <p className="text-xs text-gray-400 flex-1">
-                        외 {upcomingMilestones.length - 4}개 일정 &middot;{' '}
-                        <Link to="/admin/milestones" className="text-[#80766b] hover:text-[#6e645a] underline underline-offset-2">
-                          전체 보기
-                        </Link>
-                      </p>
+                      <p className="text-xs text-gray-400">외 {upcomingMilestones.length - 4}개 일정</p>
                     </li>
                   )}
                 </ol>
