@@ -211,44 +211,10 @@ export default function ParticipantDashboard() {
         </Card>
       </div>
 
-      {/* ── ③ 제출 현황 ── */}
-      {team && !evaluationDone && (
-        <Card title="제출 현황" className="mb-5">
-          <div
-            className={`flex items-center gap-4 p-4 rounded-xl border ${
-              team.submit_status === 'submitted'
-                ? 'bg-green-50 border-green-100'
-                : 'bg-gray-50 border-gray-200'
-            }`}
-          >
-            {team.submit_status === 'submitted' ? (
-              <CheckCircle2 className="w-8 h-8 text-green-500 shrink-0" />
-            ) : (
-              <Clock className="w-8 h-8 text-gray-400 shrink-0" />
-            )}
-            <div className="flex-1 min-w-0">
-              <p className={`font-semibold ${team.submit_status === 'submitted' ? 'text-green-800' : 'text-gray-600'}`}>
-                {team.submit_status === 'submitted' ? '제출 완료' : '아직 제출하지 않았습니다'}
-              </p>
-              <p className={`text-xs mt-0.5 ${team.submit_status === 'submitted' ? 'text-green-600' : 'text-gray-400'}`}>
-                {team.submit_status === 'submitted'
-                  ? '심사위원회에서 검토 중입니다.'
-                  : '제출하기 메뉴에서 결과물을 제출해주세요.'}
-              </p>
-            </div>
-            <Link
-              to="/participant/submit"
-              className="flex items-center gap-0.5 text-xs font-medium text-[#80766b] hover:text-[#6e645a] transition-colors shrink-0"
-            >
-              {team.submit_status === 'submitted' ? '확인' : '제출하기'} <ChevronRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-        </Card>
-      )}
-
-      {/* ── ④ 최근 공지사항 ── */}
+      {/* ── ③ 최근 공지사항 ── */}
       <Card
         title="최근 공지사항"
+        className="mb-5"
         headerRight={
           <Link
             to="/participant/notices"
@@ -286,6 +252,41 @@ export default function ParticipantDashboard() {
           </ul>
         )}
       </Card>
+
+      {/* ── ④ 제출 현황 ── */}
+      {team && !evaluationDone && (
+        <Card title="제출 현황" className="mb-5">
+          <div
+            className={`flex items-center gap-4 p-4 rounded-xl border ${
+              team.submit_status === 'submitted'
+                ? 'bg-green-50 border-green-100'
+                : 'bg-gray-50 border-gray-200'
+            }`}
+          >
+            {team.submit_status === 'submitted' ? (
+              <CheckCircle2 className="w-8 h-8 text-green-500 shrink-0" />
+            ) : (
+              <Clock className="w-8 h-8 text-gray-400 shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className={`font-semibold ${team.submit_status === 'submitted' ? 'text-green-800' : 'text-gray-600'}`}>
+                {team.submit_status === 'submitted' ? '제출 완료' : '아직 제출하지 않았습니다'}
+              </p>
+              <p className={`text-xs mt-0.5 ${team.submit_status === 'submitted' ? 'text-green-600' : 'text-gray-400'}`}>
+                {team.submit_status === 'submitted'
+                  ? '심사위원회에서 검토 중입니다.'
+                  : '제출하기 메뉴에서 결과물을 제출해주세요.'}
+              </p>
+            </div>
+            <Link
+              to="/participant/submit"
+              className="flex items-center gap-0.5 text-xs font-medium text-[#80766b] hover:text-[#6e645a] transition-colors shrink-0"
+            >
+              {team.submit_status === 'submitted' ? '확인' : '제출하기'} <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </Card>
+      )}
     </ParticipantLayout>
   );
 }
