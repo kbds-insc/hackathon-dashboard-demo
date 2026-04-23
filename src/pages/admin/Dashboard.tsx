@@ -158,101 +158,73 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── 다음 일정 ── */}
-      <Card title="다음 일정" className="mb-6">
-        {nextMilestone && ddayValue !== null ? (
-          <>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-gray-700 truncate">{nextMilestone.title}</p>
-                  {!nextMilestone.isPublic && (
-                    <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-400">비공개</span>
-                  )}
+      {/* ── 다음 일정 + 최근 공지사항 (PC: 2열) ── */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 mb-6">
+        {/* 다음 일정 */}
+        <Card title="다음 일정">
+          {nextMilestone && ddayValue !== null ? (
+            <>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-gray-700 truncate">{nextMilestone.title}</p>
+                    {!nextMilestone.isPublic && (
+                      <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-400">비공개</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">{nextMilestone.date}</p>
                 </div>
-                <p className="text-xs text-gray-400 mt-0.5">{nextMilestone.date}</p>
+                <span className="text-3xl font-black text-indigo-600 shrink-0 tabular-nums">
+                  {formatDday(ddayValue)}
+                </span>
               </div>
-              <span className="text-3xl font-black text-indigo-600 shrink-0 tabular-nums">
-                {formatDday(ddayValue)}
-              </span>
-            </div>
-            <div className="flex items-center">
-              {milestones.map((m, i) => (
-                <div
-                  key={m.id}
-                  className={`flex items-center ${i < milestones.length - 1 ? 'flex-1' : ''}`}
-                >
+              <div className="flex items-center">
+                {milestones.map((m, i) => (
                   <div
-                    className={`w-2.5 h-2.5 rounded-full shrink-0 transition-colors ${
-                      m.isDone
-                        ? 'bg-emerald-500'
-                        : i === currentIdx
-                        ? 'bg-indigo-500 ring-2 ring-indigo-200 ring-offset-1'
-                        : 'bg-gray-200'
-                    }`}
-                  />
-                  {i < milestones.length - 1 && (
-                    <div className={`flex-1 h-px ${m.isDone ? 'bg-emerald-300' : 'bg-gray-200'}`} />
-                  )}
-                </div>
-              ))}
-            </div>
-            <div className="flex items-center justify-between text-xs text-gray-400 mt-2">
-              <span>{doneMilestones.length}/{milestones.length} 완료 · {progress}%</span>
+                    key={m.id}
+                    className={`flex items-center ${i < milestones.length - 1 ? 'flex-1' : ''}`}
+                  >
+                    <div
+                      className={`w-2.5 h-2.5 rounded-full shrink-0 transition-colors ${
+                        m.isDone
+                          ? 'bg-emerald-500'
+                          : i === currentIdx
+                          ? 'bg-indigo-500 ring-2 ring-indigo-200 ring-offset-1'
+                          : 'bg-gray-200'
+                      }`}
+                    />
+                    {i < milestones.length - 1 && (
+                      <div className={`flex-1 h-px ${m.isDone ? 'bg-emerald-300' : 'bg-gray-200'}`} />
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between text-xs text-gray-400 mt-2">
+                <span>{doneMilestones.length}/{milestones.length} 완료 · {progress}%</span>
+                <Link
+                  to="/admin/milestones"
+                  className="flex items-center gap-0.5 font-medium text-[#80766b] hover:text-[#6e645a] transition-colors"
+                >
+                  전체 보기 <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-2xl mb-2">🎉</p>
+              <p className="text-sm font-semibold text-gray-700">모든 일정이 완료됐습니다!</p>
               <Link
                 to="/admin/milestones"
-                className="flex items-center gap-0.5 font-medium text-[#80766b] hover:text-[#6e645a] transition-colors"
+                className="mt-2 inline-flex items-center gap-0.5 text-xs font-medium text-[#80766b] hover:text-[#6e645a] transition-colors"
               >
-                전체 보기 <ChevronRight className="w-3.5 h-3.5" />
+                일정 확인 <ChevronRight className="w-3.5 h-3.5" />
               </Link>
             </div>
-          </>
-        ) : (
-          <div className="text-center py-4">
-            <p className="text-2xl mb-2">🎉</p>
-            <p className="text-sm font-semibold text-gray-700">모든 일정이 완료됐습니다!</p>
-            <Link
-              to="/admin/milestones"
-              className="mt-2 inline-flex items-center gap-0.5 text-xs font-medium text-[#80766b] hover:text-[#6e645a] transition-colors"
-            >
-              일정 확인 <ChevronRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-        )}
-      </Card>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
-        {/* ── 팀별 제출 현황 ── */}
-        <Card title="팀별 제출 현황" className="order-2 lg:order-1">
-          <div className="max-h-[460px] overflow-y-auto pr-1">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-              {teams.map((team) => {
-                const submitted = team.submitStatus === 'submitted';
-                return (
-                  <div
-                    key={team.id}
-                    className={`rounded-xl border p-4 flex items-center justify-between gap-3 transition-colors ${
-                      submitted
-                        ? 'bg-indigo-50 border-indigo-200'
-                        : 'bg-gray-50 border-gray-200'
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <p className={`text-sm font-semibold truncate ${submitted ? 'text-indigo-800' : 'text-gray-700'}`}>
-                        {team.name}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-0.5">팀원 {team.members.length}명</p>
-                    </div>
-                    <Badge status={team.submitStatus} />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          )}
         </Card>
 
-        {/* ── 최근 공지사항 ── */}
-        <Card title="최근 공지사항" className="order-1 lg:order-2">
+        {/* 최근 공지사항 */}
+        <Card title="최근 공지사항">
           <ul className="divide-y divide-gray-100 lg:hidden">
             {mobileRecentNotices.map((notice) => (
               <li key={notice.id} className="py-3 first:pt-0 last:pb-0">
@@ -267,7 +239,6 @@ export default function Dashboard() {
               </li>
             ))}
           </ul>
-
           <ul className="hidden divide-y divide-gray-100 lg:block">
             {recentNotices.map((notice) => (
               <li key={notice.id} className="py-3 first:pt-0 last:pb-0">
@@ -284,6 +255,33 @@ export default function Dashboard() {
           </ul>
         </Card>
       </div>
+
+      {/* ── 팀별 제출 현황 ── */}
+      <Card title="팀별 제출 현황">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {teams.map((team) => {
+            const submitted = team.submitStatus === 'submitted';
+            return (
+              <div
+                key={team.id}
+                className={`rounded-xl border p-4 flex items-center justify-between gap-3 transition-colors ${
+                  submitted
+                    ? 'bg-indigo-50 border-indigo-200'
+                    : 'bg-gray-50 border-gray-200'
+                }`}
+              >
+                <div className="min-w-0">
+                  <p className={`text-sm font-semibold truncate ${submitted ? 'text-indigo-800' : 'text-gray-700'}`}>
+                    {team.name}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">팀원 {team.members.length}명</p>
+                </div>
+                <Badge status={team.submitStatus} />
+              </div>
+            );
+          })}
+        </div>
+      </Card>
     </AdminLayout>
   );
 }
