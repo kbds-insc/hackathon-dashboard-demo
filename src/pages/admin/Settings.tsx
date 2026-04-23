@@ -3,7 +3,7 @@ import AdminLayout from '../../components/layout/AdminLayout';
 import Card from '../../components/ui/Card';
 import { apiFetchSettings, apiUpsertSettings } from '../../api/settings';
 import { SCORE_CRITERIA } from '../../data/scoreStore';
-import { CheckCircle2, Save } from 'lucide-react';
+import { CheckCircle2, Save, AlertCircle } from 'lucide-react';
 
 function isoToLocal(iso: string): string {
   const d = new Date(iso);
@@ -36,6 +36,7 @@ export default function AdminSettings() {
   const [published, setPublished] = useState(false);
   const [savingOps, setSavingOps] = useState(false);
   const [savedOps, setSavedOps] = useState(false);
+  const [opsError, setOpsError] = useState('');
 
   const [maxValues, setMaxValues] = useState<CriteriaMax>({
     creativity: 25, practicality: 25, completion: 25, presentation: 25,
@@ -60,6 +61,15 @@ export default function AdminSettings() {
   const criteriaValid = criteriaTotal === 100;
 
   const handleSaveOps = async () => {
+    if (published && deadline && new Date(deadline) > new Date()) {
+      const d = new Date(deadline);
+      const dateStr = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+      const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      setOpsError(`제출 마감일(${dateStr} ${timeStr})이 아직 지나지 않았습니다. 마감 이후 결과를 공개해 주세요.`);
+      setPublished(false);
+      return;
+    }
+    setOpsError('');
     setSavingOps(true);
     try {
       await apiUpsertSettings({
@@ -115,12 +125,12 @@ export default function AdminSettings() {
               <input
                 type="datetime-local"
                 value={deadline}
-                onChange={(e) => { setDeadline(e.target.value); setSavedOps(false); }}
+                onChange={(e) => { setDeadline(e.target.value); setSavedOps(false); setOpsError(''); }}
                 className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#80766b]/30"
               />
               {deadline && (
                 <button
-                  onClick={() => { setDeadline(''); setSavedOps(false); }}
+                  onClick={() => { setDeadline(''); setSavedOps(false); setOpsError(''); }}
                   className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100"
                 >
                   초기화
@@ -138,11 +148,18 @@ export default function AdminSettings() {
               <p className="text-sm font-medium text-gray-700">결과 공개</p>
               <p className="text-xs text-gray-400 mt-0.5">켜면 참가자 화면에 평가 점수와 순위가 공개됩니다.</p>
             </div>
-            <Toggle checked={published} onChange={(v) => { setPublished(v); setSavedOps(false); }} />
+            <Toggle checked={published} onChange={(v) => { setPublished(v); setSavedOps(false); setOpsError(''); }} />
           </div>
         </div>
 
-        <div className="mt-6 flex items-center justify-end gap-3">
+        {opsError && (
+          <div className="mt-4 flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5">
+            <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-700 leading-relaxed">{opsError}</p>
+          </div>
+        )}
+
+        <div className="mt-4 flex items-center justify-end gap-3">
           {savedOps && (
             <span className="flex items-center gap-1 text-sm text-green-600">
               <CheckCircle2 className="w-4 h-4" />저장됨
