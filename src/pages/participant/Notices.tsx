@@ -1,15 +1,29 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import ParticipantLayout from '../../components/layout/ParticipantLayout';
 import { useNotices } from '../../hooks/useNotices';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function ParticipantNotices() {
   const { data: notices } = useNotices();
+  const location = useLocation();
+  const lastScrolledHash = useRef('');
   const sorted = [...notices].sort((a, b) => b.date.localeCompare(a.date));
   const d = new Date();
   const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const id = location.hash.slice(1);
+    if (!id || notices.length === 0 || lastScrolledHash.current === id) return;
+    if (!notices.some((n) => n.id === id)) return;
+    lastScrolledHash.current = id;
+    setExpanded((prev) => { const next = new Set(prev); next.add(id); return next; });
+    setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  }, [location.hash, notices]);
 
   const toggle = (id: string) => {
     setExpanded((prev) => {
@@ -36,7 +50,8 @@ export default function ParticipantNotices() {
           return (
             <div
               key={notice.id}
-              className={`rounded-xl border overflow-hidden transition-colors ${
+              id={notice.id}
+              className={`scroll-mt-4 rounded-xl border overflow-hidden transition-colors ${
                 isOpen ? 'border-[#80766b]/30' : 'border-gray-100'
               } bg-white`}
             >

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Users, Calendar, Megaphone, Upload, Trophy, LogOut, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Calendar, Megaphone, Upload, Trophy, LogOut, Menu, X } from 'lucide-react';
 import { useAuth } from '../../contexts/useAuth';
 import { useCurrentParticipant } from '../../hooks/useCurrentParticipant';
 import {
@@ -14,7 +14,7 @@ import {
 } from '../../contexts/NoticesNotification';
 
 const NAV_ITEMS = [
-  { path: '/participant',          label: '내 팀',    icon: Users },
+  { path: '/participant',          label: '대시보드', icon: LayoutDashboard },
   { path: '/participant/schedule', label: '일정',     icon: Calendar },
   { path: '/participant/notices',  label: '공지사항', icon: Megaphone },
   { path: '/participant/submit',   label: '제출하기', icon: Upload },
