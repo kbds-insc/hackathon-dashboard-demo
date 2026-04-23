@@ -221,7 +221,7 @@ function ParticipantLayoutContent({ children }: { children: ReactNode }) {
             <button
               onClick={handleLogout}
               title="로그아웃"
-              className="hidden lg:flex p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+              className="flex p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
             >
               <LogOut className="w-4 h-4" />
             </button>

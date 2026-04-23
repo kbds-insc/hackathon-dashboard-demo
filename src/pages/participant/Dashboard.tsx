@@ -136,13 +136,14 @@ export default function ParticipantDashboard() {
                       ) : (
                         <span className="w-3.5 h-3.5 shrink-0" />
                       )}
-                      <span className="text-sm font-medium text-gray-700 truncate">{m.name}</span>
-                      {m.position && (
-                        <span className="text-xs text-gray-400 shrink-0">{m.position}</span>
-                      )}
-                      {m.id === participant?.id && (
-                        <span className="ml-auto text-xs font-semibold text-[#80766b] shrink-0">나</span>
-                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-700 truncate">{m.name}</p>
+                        {(m.department || m.position) && (
+                          <p className="text-xs text-gray-400 truncate">
+                            {[m.department, m.position].filter(Boolean).join(' · ')}
+                          </p>
+                        )}
+                      </div>
                     </li>
                   ))}
                 </ul>
