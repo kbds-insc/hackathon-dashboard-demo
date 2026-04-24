@@ -312,10 +312,17 @@ export default function Participants() {
     onConfirm: () => void;
   } | null>(null);
 
+  const [debouncedTeamSearch, setDebouncedTeamSearch] = useState('');
+
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedTeamSearch(tAssignment.search), 300);
+    return () => clearTimeout(timer);
+  }, [tAssignment.search]);
 
   const displayTeams = useMemo(() => mergeTeams(teams, optimisticTeams), [teams, optimisticTeams]);
 
@@ -371,12 +378,12 @@ export default function Participants() {
   );
 
   const filteredTeamAddCandidates = useMemo(() => {
-    const query = tAssignment.search.trim().toLowerCase();
+    const query = debouncedTeamSearch.trim().toLowerCase();
     return teamAddCandidates.filter((participant) => {
       if (!query) return true;
       return participant.name.toLowerCase().includes(query);
     });
-  }, [teamAddCandidates, tAssignment.search]);
+  }, [teamAddCandidates, debouncedTeamSearch]);
 
   const selectedTeamParticipants = useMemo(
     () =>
