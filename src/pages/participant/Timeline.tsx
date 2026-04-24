@@ -143,7 +143,8 @@ export default function Timeline() {
         <div>
           <p className="text-sm font-medium text-indigo-700">참석 투표 안내</p>
           <p className="text-xs text-indigo-500 mt-0.5 leading-relaxed">
-            각 일정은 <span className="font-medium">7일 전부터 전날 오후 11시</span>까지 참석 여부를 투표할 수 있습니다. 마감 전까지 재투표가 가능합니다.
+            각 일정은 <span className="font-medium">7일 전부터 전날 오후 11시</span>까지 참석 여부를 투표할 수 있습니다. 마감 전까지 재투표가 가능합니다.<br />
+            마감 시간은 변동될 수 있으며, 투표가 어려우신 경우 관리자에게 문의해 주세요.
           </p>
         </div>
       </div>
