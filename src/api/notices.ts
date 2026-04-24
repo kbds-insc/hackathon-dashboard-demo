@@ -6,6 +6,7 @@ interface DBNotice {
   title: string;
   content: string;
   author: string;
+  is_public: boolean;
   created_at: string;
 }
 
@@ -21,33 +22,48 @@ function fromDB(row: DBNotice): Notice {
     content: row.content,
     author: row.author ?? '관리자',
     date: toLocalDateStr(row.created_at),
+    isPublic: row.is_public ?? true,
   };
 }
 
-export async function apiFetchNotices(): Promise<Notice[]> {
-  const { data, error } = await supabase
+export async function apiFetchNotices(opts?: { publicOnly?: boolean }): Promise<Notice[]> {
+  let q = supabase
     .from('notices')
     .select('*')
     .order('created_at', { ascending: false });
+  if (opts?.publicOnly) q = q.eq('is_public', true);
+  const { data, error } = await q;
   if (error) throw error;
   return ((data ?? []) as DBNotice[]).map(fromDB);
 }
 
-export async function apiAddNotice(notice: Pick<Notice, 'title' | 'content'>): Promise<Notice> {
+export async function apiAddNotice(
+  notice: Pick<Notice, 'title' | 'content'> & { isPublic?: boolean }
+): Promise<Notice> {
   const { data, error } = await supabase
     .from('notices')
-    .insert({ title: notice.title, content: notice.content, author: '관리자' })
+    .insert({
+      title: notice.title,
+      content: notice.content,
+      author: '관리자',
+      is_public: notice.isPublic ?? true,
+    })
     .select()
     .single();
   if (error) throw error;
   return fromDB(data as DBNotice);
 }
 
-export async function apiUpdateNotice(id: string, notice: Pick<Notice, 'title' | 'content'>): Promise<void> {
-  const { error } = await supabase
-    .from('notices')
-    .update({ title: notice.title, content: notice.content })
-    .eq('id', id);
+export async function apiUpdateNotice(
+  id: string,
+  notice: Pick<Notice, 'title' | 'content'> & { isPublic?: boolean }
+): Promise<void> {
+  const patch: Record<string, unknown> = {
+    title: notice.title,
+    content: notice.content,
+  };
+  if ('isPublic' in notice) patch.is_public = notice.isPublic;
+  const { error } = await supabase.from('notices').update(patch).eq('id', id);
   if (error) throw error;
 }
 

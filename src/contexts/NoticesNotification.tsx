@@ -23,7 +23,7 @@ function getSeenIds(storageKey: string): string[] {
 }
 
 export function NoticesNotificationProvider({ children }: { children: ReactNode }) {
-  const { data: notices } = useNotices();
+  const { data: notices } = useNotices({ publicOnly: true });
   const { user } = useAuth();
   const { pathname } = useLocation();
   const storageKey = `notices_seen_ids_${user?.id ?? ''}`;

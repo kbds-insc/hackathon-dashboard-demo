@@ -28,6 +28,7 @@ export interface Notice {
   content: string;
   date: string;
   author: string;
+  isPublic?: boolean;
 }
 
 export interface Milestone {

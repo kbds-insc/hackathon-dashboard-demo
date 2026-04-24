@@ -5,7 +5,7 @@ import Card from '../../components/ui/Card';
 import { useNotices } from '../../hooks/useNotices';
 import { apiAddNotice, apiUpdateNotice, apiDeleteNotice } from '../../api/notices';
 import type { Notice } from '../../data/mockData';
-import { Plus, Pencil, Trash2, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, ChevronDown, ChevronUp, Globe, Lock } from 'lucide-react';
 
 type FormMode = 'add' | 'edit';
 
@@ -19,6 +19,7 @@ export default function Notices() {
   const [editId, setEditId] = useState<string | null>(null);
   const [titleInput, setTitleInput] = useState('');
   const [contentInput, setContentInput] = useState('');
+  const [isPublicInput, setIsPublicInput] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
 
@@ -46,6 +47,7 @@ export default function Notices() {
     setFormMode('add');
     setTitleInput('');
     setContentInput('');
+    setIsPublicInput(true);
     setEditId(null);
     setShowForm(true);
   };
@@ -54,6 +56,7 @@ export default function Notices() {
     setFormMode('edit');
     setTitleInput(notice.title);
     setContentInput(notice.content);
+    setIsPublicInput(notice.isPublic ?? true);
     setEditId(notice.id);
     setShowForm(true);
   };
@@ -62,6 +65,7 @@ export default function Notices() {
     setShowForm(false);
     setTitleInput('');
     setContentInput('');
+    setIsPublicInput(true);
     setEditId(null);
   };
 
@@ -70,9 +74,9 @@ export default function Notices() {
     setSaving(true);
     try {
       if (formMode === 'add') {
-        await apiAddNotice({ title: titleInput.trim(), content: contentInput.trim() });
+        await apiAddNotice({ title: titleInput.trim(), content: contentInput.trim(), isPublic: isPublicInput });
       } else if (editId) {
-        await apiUpdateNotice(editId, { title: titleInput.trim(), content: contentInput.trim() });
+        await apiUpdateNotice(editId, { title: titleInput.trim(), content: contentInput.trim(), isPublic: isPublicInput });
       }
       refetch();
       closeForm();
@@ -92,13 +96,18 @@ export default function Notices() {
     }
   };
 
+  const publicCount = notices.filter((n) => n.isPublic !== false).length;
+
   return (
     <AdminLayout>
       {/* ── 헤더 ── */}
       <div className="flex items-center justify-between mb-5">
-        <h2 className="text-base sm:text-lg font-semibold text-gray-800">
-          공지사항 ({notices.length})
-        </h2>
+        <div>
+          <h2 className="text-base sm:text-lg font-semibold text-gray-800">
+            공지사항 ({notices.length})
+          </h2>
+          <p className="text-xs text-gray-400 mt-0.5">공개 {publicCount}개 · 비공개 {notices.length - publicCount}개</p>
+        </div>
         <button
           onClick={openAdd}
           className="flex items-center gap-1.5 px-3 py-2 bg-[#80766b] text-white text-sm font-medium rounded-lg hover:bg-[#6e645a] transition-colors"
@@ -137,20 +146,35 @@ export default function Notices() {
               rows={4}
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#80766b]/30 placeholder-gray-300 resize-none"
             />
-            <div className="flex justify-end gap-2">
+            <div className="flex items-center justify-between">
               <button
-                onClick={closeForm}
-                className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                type="button"
+                onClick={() => setIsPublicInput((v) => !v)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                  isPublicInput
+                    ? 'bg-green-50 border-green-200 text-green-700'
+                    : 'bg-gray-50 border-gray-200 text-gray-500'
+                }`}
               >
-                취소
+                {isPublicInput
+                  ? <><Globe className="w-3.5 h-3.5" />참가자 공개</>
+                  : <><Lock className="w-3.5 h-3.5" />관리자 전용</>}
               </button>
-              <button
-                onClick={handleSubmit}
-                disabled={!titleInput.trim() || !contentInput.trim() || saving}
-                className="px-4 py-2 text-sm text-white bg-[#80766b] rounded-lg hover:bg-[#6e645a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {saving ? '저장 중...' : formMode === 'add' ? '등록' : '저장'}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={closeForm}
+                  className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={!titleInput.trim() || !contentInput.trim() || saving}
+                  className="px-4 py-2 text-sm text-white bg-[#80766b] rounded-lg hover:bg-[#6e645a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {saving ? '저장 중...' : formMode === 'add' ? '등록' : '저장'}
+                </button>
+              </div>
             </div>
           </div>
         </Card>
@@ -161,6 +185,7 @@ export default function Notices() {
         <div className="space-y-3">
           {notices.map((notice) => {
             const expanded = expandedIds.has(notice.id);
+            const isPublic = notice.isPublic !== false;
             return (
               <div key={notice.id} id={notice.id} className="scroll-mt-4">
               <Card>
@@ -168,6 +193,13 @@ export default function Notices() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-medium text-gray-800">{notice.title}</p>
+                      <span className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full shrink-0 ${
+                        isPublic ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {isPublic
+                          ? <><Globe className="w-3 h-3" />공개</>
+                          : <><Lock className="w-3 h-3" />비공개</>}
+                      </span>
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">
                       {notice.date} · {notice.author}
