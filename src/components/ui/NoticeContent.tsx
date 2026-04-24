@@ -32,7 +32,7 @@ export default function NoticeContent({ content, className }: Props) {
               key={i}
               type="button"
               onClick={(e) => handleUrlClick(part, e)}
-              className="break-all text-indigo-500 underline underline-offset-2 hover:text-indigo-700 transition-colors"
+              className="break-all text-left text-indigo-500 underline underline-offset-2 hover:text-indigo-700 transition-colors"
             >
               {part}
             </button>
