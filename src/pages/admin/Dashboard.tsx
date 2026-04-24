@@ -9,7 +9,13 @@ import { useScores } from '../../hooks/useScores';
 import { useSettings } from '../../hooks/useSettings';
 import { useNotices } from '../../hooks/useNotices';
 import { useMilestones } from '../../hooks/useMilestones';
-import { Users, Flag, FileCheck, Trophy, ChevronRight } from 'lucide-react';
+import { Users, Flag, FileCheck, Trophy, ChevronRight, Lock } from 'lucide-react';
+
+const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+function getDayOfWeek(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return `(${DAY_LABELS[new Date(y, m - 1, d).getDay()]})`;
+}
 
 function getDday(dateStr: string): number {
   const today = new Date();
@@ -43,8 +49,7 @@ export default function Dashboard() {
 
   const submittedCount = teams.filter((t) => t.submitStatus === 'submitted').length;
   const scoredCount = scores.filter((s) => s.total > 0).length;
-  const recentNotices = notices.slice(0, 5);
-  const mobileRecentNotices = notices.slice(0, 2);
+  const recentNotices = notices.slice(0, 2);
 
   const top3 = [...scores]
     .filter((s) => s.judgeCount > 0)
@@ -173,7 +178,7 @@ export default function Dashboard() {
                       <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-400">비공개</span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-400 mt-0.5">{nextMilestone.date}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{nextMilestone.date} {getDayOfWeek(nextMilestone.date)}</p>
                 </div>
                 <span className="text-3xl font-black text-indigo-600 shrink-0 tabular-nums">
                   {formatDday(ddayValue)}
@@ -224,7 +229,7 @@ export default function Dashboard() {
                           {!isLast && <div className="w-0.5 flex-1 bg-gray-200 my-1 min-h-[10px]" />}
                         </div>
                         <div className={`flex-1 min-w-0 ${isLast ? 'pb-0' : 'pb-2.5'}`}>
-                          <p className="text-[11px] text-gray-400">{m.date}</p>
+                          <p className="text-[11px] text-gray-400">{m.date} {getDayOfWeek(m.date)}</p>
                           <p className={`text-sm font-medium mt-0.5 truncate ${isCurrent ? 'text-indigo-700' : 'text-gray-600'}`}>
                             {m.title}
                           </p>
@@ -269,30 +274,19 @@ export default function Dashboard() {
 
         {/* 최근 공지사항 */}
         <Card title="최근 공지사항">
-          <ul className="divide-y divide-gray-100 lg:hidden">
-            {mobileRecentNotices.map((notice) => (
-              <li key={notice.id} className="py-3 first:pt-0 last:pb-0">
-                <Link to={`/admin/notices#${notice.id}`} className="block hover:opacity-70 transition-opacity">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-medium text-gray-800 leading-snug">{notice.title}</p>
-                    <span className="text-xs text-gray-400 shrink-0">{notice.date}</span>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-0.5">{notice.author}</p>
-                  <p className="text-sm text-gray-500 mt-1.5 line-clamp-2">{notice.content}</p>
-                </Link>
-              </li>
-            ))}
-          </ul>
-          <ul className="hidden divide-y divide-gray-100 lg:block">
+          <ul className="divide-y divide-gray-100">
             {recentNotices.map((notice) => (
               <li key={notice.id} className="py-3 first:pt-0 last:pb-0">
                 <Link to={`/admin/notices#${notice.id}`} className="block hover:opacity-70 transition-opacity">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-medium text-gray-800 leading-snug">{notice.title}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-800 truncate">{notice.title}</p>
+                      {notice.isPublic === false && <Lock className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
+                    </div>
                     <span className="text-xs text-gray-400 shrink-0">{notice.date}</span>
                   </div>
                   <p className="text-xs text-gray-400 mt-0.5">{notice.author}</p>
-                  <p className="text-sm text-gray-500 mt-1.5 line-clamp-2">{notice.content}</p>
+                  <p className="text-sm text-gray-500 mt-1.5 line-clamp-2 break-words">{notice.content}</p>
                 </Link>
               </li>
             ))}

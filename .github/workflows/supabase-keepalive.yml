@@ -1,0 +1,22 @@
+name: Supabase Keep-Alive
+
+on:
+  schedule:
+    - cron: '0 0,6,12,18 * * *'  # 매일 6시간마다 (UTC 0/6/12/18시 = KST 9/15/21/3시)
+  workflow_dispatch:        # 수동 실행 가능
+
+jobs:
+  ping-prd:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Ping Supabase
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${{ secrets.VITE_SUPABASE_URL }}/rest/v1/" \
+            -H "apikey: ${{ secrets.VITE_SUPABASE_ANON_KEY }}")
+          echo "Supabase response status: $STATUS"
+          if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 500 ]; then
+            echo "Unexpected status $STATUS"
+            exit 1
+          fi

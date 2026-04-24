@@ -3,9 +3,10 @@ import { useLocation } from 'react-router-dom';
 import ParticipantLayout from '../../components/layout/ParticipantLayout';
 import { useNotices } from '../../hooks/useNotices';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import NoticeContent from '../../components/ui/NoticeContent';
 
 export default function ParticipantNotices() {
-  const { data: notices } = useNotices();
+  const { data: notices } = useNotices({ publicOnly: true });
   const location = useLocation();
   const lastScrolledHash = useRef('');
   const sorted = [...notices].sort((a, b) => b.date.localeCompare(a.date));
@@ -91,9 +92,10 @@ export default function ParticipantNotices() {
               {/* 아코디언 내용 */}
               {isOpen && (
                 <div className="px-4 pb-4 border-t border-gray-100">
-                  <p className="text-sm text-gray-600 leading-relaxed pt-3 whitespace-pre-wrap">
-                    {notice.content}
-                  </p>
+                  <NoticeContent
+                    content={notice.content}
+                    className="text-sm text-gray-600 leading-relaxed pt-3 whitespace-pre-wrap break-words"
+                  />
                 </div>
               )}
             </div>

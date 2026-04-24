@@ -5,13 +5,14 @@ import type { Notice } from '../data/mockData';
 
 let instanceCounter = 0;
 
-export function useNotices() {
+export function useNotices(opts?: { publicOnly?: boolean }) {
   const [data, setData] = useState<Notice[]>([]);
   const channelName = useRef(`hook-notices-${++instanceCounter}`);
+  const publicOnly = opts?.publicOnly ?? false;
 
   const load = useCallback(() => {
-    apiFetchNotices().then(setData).catch(console.error);
-  }, []);
+    apiFetchNotices({ publicOnly }).then(setData).catch(console.error);
+  }, [publicOnly]);
 
   useEffect(() => {
     load();
