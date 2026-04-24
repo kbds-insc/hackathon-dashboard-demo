@@ -26,7 +26,7 @@ function formatDday(days: number): string {
 export default function ParticipantDashboard() {
   const { team, loading } = useCurrentParticipant();
   const { data: allParticipants } = useParticipants();
-  const { data: notices } = useNotices();
+  const { data: notices } = useNotices({ publicOnly: true });
   const { data: allMilestones } = useMilestones();
   const allScores = useScores();
   const settings = useSettings();
