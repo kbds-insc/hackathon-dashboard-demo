@@ -49,8 +49,7 @@ export default function Dashboard() {
 
   const submittedCount = teams.filter((t) => t.submitStatus === 'submitted').length;
   const scoredCount = scores.filter((s) => s.total > 0).length;
-  const recentNotices = notices.slice(0, 3);
-  const mobileRecentNotices = notices.slice(0, 3);
+  const recentNotices = notices.slice(0, 2);
 
   const top3 = [...scores]
     .filter((s) => s.judgeCount > 0)
@@ -275,24 +274,7 @@ export default function Dashboard() {
 
         {/* 최근 공지사항 */}
         <Card title="최근 공지사항">
-          <ul className="divide-y divide-gray-100 lg:hidden">
-            {mobileRecentNotices.map((notice) => (
-              <li key={notice.id} className="py-3 first:pt-0 last:pb-0">
-                <Link to={`/admin/notices#${notice.id}`} className="block hover:opacity-70 transition-opacity">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-800 truncate">{notice.title}</p>
-                      {notice.isPublic === false && <Lock className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
-                    </div>
-                    <span className="text-xs text-gray-400 shrink-0">{notice.date}</span>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-0.5">{notice.author}</p>
-                  <p className="text-sm text-gray-500 mt-1.5 line-clamp-2 break-words">{notice.content}</p>
-                </Link>
-              </li>
-            ))}
-          </ul>
-          <ul className="hidden divide-y divide-gray-100 lg:block">
+          <ul className="divide-y divide-gray-100">
             {recentNotices.map((notice) => (
               <li key={notice.id} className="py-3 first:pt-0 last:pb-0">
                 <Link to={`/admin/notices#${notice.id}`} className="block hover:opacity-70 transition-opacity">
