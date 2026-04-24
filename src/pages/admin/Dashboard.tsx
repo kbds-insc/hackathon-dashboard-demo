@@ -287,7 +287,7 @@ export default function Dashboard() {
                     <span className="text-xs text-gray-400 shrink-0">{notice.date}</span>
                   </div>
                   <p className="text-xs text-gray-400 mt-0.5">{notice.author}</p>
-                  <p className="text-sm text-gray-500 mt-1.5 line-clamp-2">{notice.content}</p>
+                  <p className="text-sm text-gray-500 mt-1.5 line-clamp-2 break-words">{notice.content}</p>
                 </Link>
               </li>
             ))}
@@ -304,7 +304,7 @@ export default function Dashboard() {
                     <span className="text-xs text-gray-400 shrink-0">{notice.date}</span>
                   </div>
                   <p className="text-xs text-gray-400 mt-0.5">{notice.author}</p>
-                  <p className="text-sm text-gray-500 mt-1.5 line-clamp-2">{notice.content}</p>
+                  <p className="text-sm text-gray-500 mt-1.5 line-clamp-2 break-words">{notice.content}</p>
                 </Link>
               </li>
             ))}

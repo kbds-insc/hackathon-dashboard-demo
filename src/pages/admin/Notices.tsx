@@ -6,6 +6,7 @@ import { useNotices } from '../../hooks/useNotices';
 import { apiAddNotice, apiUpdateNotice, apiDeleteNotice } from '../../api/notices';
 import type { Notice } from '../../data/mockData';
 import { Plus, Pencil, Trash2, X, ChevronDown, ChevronUp, Globe, Lock } from 'lucide-react';
+import NoticeContent from '../../components/ui/NoticeContent';
 
 type FormMode = 'add' | 'edit';
 
@@ -204,9 +205,10 @@ export default function Notices() {
                     <p className="text-xs text-gray-400 mt-0.5">
                       {notice.date} · {notice.author}
                     </p>
-                    <p className={`text-sm text-gray-500 mt-2 whitespace-pre-wrap ${expanded ? '' : 'line-clamp-2'}`}>
-                      {notice.content}
-                    </p>
+                    <NoticeContent
+                      content={notice.content}
+                      className={`text-sm text-gray-500 mt-2 whitespace-pre-wrap break-words ${expanded ? '' : 'line-clamp-2'}`}
+                    />
                     <button
                       onClick={() => toggleExpand(notice.id)}
                       className="flex items-center gap-1 mt-1.5 text-xs text-[#80766b] hover:text-[#6e645a] transition-colors"
