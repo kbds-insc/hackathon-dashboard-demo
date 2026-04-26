@@ -5,7 +5,7 @@ import Card from '../../components/ui/Card';
 import { useNotices } from '../../hooks/useNotices';
 import { apiAddNotice, apiUpdateNotice, apiDeleteNotice } from '../../api/notices';
 import { apiGetUploadUrl, apiUploadToS3, apiGetDownloadUrl, apiDeleteNoticeFile } from '../../api/noticeFiles';
-import type { Notice } from '../../data/mockData';
+import type { Notice, NoticeFile } from '../../data/mockData';
 import {
   Plus, Pencil, Trash2, X, ChevronDown, ChevronUp,
   Globe, Lock, Paperclip, Download, FileText, Loader2,
@@ -16,6 +16,7 @@ type FormMode = 'add' | 'edit';
 
 const ACCEPTED_TYPES = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.txt,.zip';
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_FILES = 3;
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
@@ -36,9 +37,14 @@ export default function Notices() {
   const [isPublicInput, setIsPublicInput] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const [uploadingId, setUploadingId] = useState<string | null>(null);
-  const [uploadError, setUploadError] = useState<{ id: string; msg: string } | null>(null);
+  // 폼 파일 상태
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [pendingDeletes, setPendingDeletes] = useState<string[]>([]);
+  const [formFileError, setFormFileError] = useState<string | null>(null);
+
+  // 조회 화면 다운로드 상태
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -61,12 +67,20 @@ export default function Notices() {
     });
   };
 
+  const resetFileState = () => {
+    setPendingFiles([]);
+    setPendingDeletes([]);
+    setFormFileError(null);
+  };
+
   const openAdd = () => {
     setFormMode('add');
     setTitleInput('');
     setContentInput('');
     setIsPublicInput(true);
     setEditId(null);
+    setSaveError(null);
+    resetFileState();
     setShowForm(true);
   };
 
@@ -76,6 +90,8 @@ export default function Notices() {
     setContentInput(notice.content);
     setIsPublicInput(notice.isPublic ?? true);
     setEditId(notice.id);
+    setSaveError(null);
+    resetFileState();
     setShowForm(true);
   };
 
@@ -85,21 +101,76 @@ export default function Notices() {
     setContentInput('');
     setIsPublicInput(true);
     setEditId(null);
+    setSaveError(null);
+    resetFileState();
+  };
+
+  // 수정 폼에서 보여줄 기존 파일 (삭제 예약 제외)
+  const editingNotice = formMode === 'edit' ? notices.find((n) => n.id === editId) : null;
+  const existingFiles: NoticeFile[] = (editingNotice?.files ?? []).filter(
+    (f) => !pendingDeletes.includes(f.id)
+  );
+  const totalFileCount = existingFiles.length + pendingFiles.length;
+  const canAddMore = totalFileCount < MAX_FILES;
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > MAX_FILE_BYTES) {
+      setFormFileError('파일 크기는 10MB를 초과할 수 없습니다.');
+      return;
+    }
+    setFormFileError(null);
+    setPendingFiles((prev) => [...prev, file]);
+  };
+
+  const removePendingFile = (index: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const stageDelete = (fileId: string) => {
+    setPendingDeletes((prev) => [...prev, fileId]);
   };
 
   const handleSubmit = async () => {
     if (!titleInput.trim() || !contentInput.trim()) return;
     setSaving(true);
+    setSaveError(null);
     try {
+      // 1. 공지 저장 → noticeId 확보
+      let noticeId: string;
       if (formMode === 'add') {
-        await apiAddNotice({ title: titleInput.trim(), content: contentInput.trim(), isPublic: isPublicInput });
-      } else if (editId) {
-        await apiUpdateNotice(editId, { title: titleInput.trim(), content: contentInput.trim(), isPublic: isPublicInput });
+        const created = await apiAddNotice({
+          title: titleInput.trim(),
+          content: contentInput.trim(),
+          isPublic: isPublicInput,
+        });
+        noticeId = created.id;
+      } else {
+        noticeId = editId!;
+        await apiUpdateNotice(editId!, {
+          title: titleInput.trim(),
+          content: contentInput.trim(),
+          isPublic: isPublicInput,
+        });
       }
+
+      // 2. 새 파일 업로드 (실패 시 기존 파일은 안전)
+      for (const file of pendingFiles) {
+        const { uploadUrl } = await apiGetUploadUrl(noticeId, file.name, file.size, file.type);
+        await apiUploadToS3(uploadUrl, file);
+      }
+
+      // 3. 삭제 예약 파일 제거 (업로드 성공 후)
+      for (const fileId of pendingDeletes) {
+        await apiDeleteNoticeFile(fileId);
+      }
+
       refetch();
       closeForm();
-    } catch {
-      console.error('공지 저장 실패');
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : '저장에 실패했습니다.');
     } finally {
       setSaving(false);
     }
@@ -111,34 +182,6 @@ export default function Notices() {
       refetch();
     } catch {
       console.error('공지 삭제 실패');
-    }
-  };
-
-  const handleFileUpload = async (noticeId: string, file: File | undefined) => {
-    if (!file) return;
-    if (file.size > MAX_FILE_BYTES) {
-      setUploadError({ id: noticeId, msg: '파일 크기는 10MB를 초과할 수 없습니다.' });
-      return;
-    }
-    setUploadError(null);
-    setUploadingId(noticeId);
-    try {
-      const { uploadUrl } = await apiGetUploadUrl(noticeId, file.name, file.size, file.type);
-      await apiUploadToS3(uploadUrl, file);
-      refetch();
-    } catch (e) {
-      setUploadError({ id: noticeId, msg: e instanceof Error ? e.message : '업로드에 실패했습니다.' });
-    } finally {
-      setUploadingId(null);
-    }
-  };
-
-  const handleFileDelete = async (fileId: string) => {
-    try {
-      await apiDeleteNoticeFile(fileId);
-      refetch();
-    } catch {
-      console.error('파일 삭제 실패');
     }
   };
 
@@ -204,6 +247,64 @@ export default function Notices() {
               rows={4}
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#80766b]/30 placeholder-gray-300 resize-none"
             />
+
+            {/* ── 파일 첨부 ── */}
+            <div className="border border-gray-200 rounded-lg px-3 py-2.5 space-y-1.5">
+              {/* 기존 파일 (수정 모드) */}
+              {existingFiles.map((f) => (
+                <div key={f.id} className="flex items-center gap-2">
+                  <FileText className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <span className="text-xs text-gray-600 flex-1 min-w-0 truncate">{f.fileName}</span>
+                  <span className="text-xs text-gray-400 shrink-0">{formatSize(f.fileSize)}</span>
+                  <button
+                    type="button"
+                    onClick={() => stageDelete(f.id)}
+                    className="p-0.5 text-gray-400 hover:text-red-500 transition-colors"
+                    title="삭제 예약"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+
+              {/* 새로 추가할 파일 */}
+              {pendingFiles.map((f, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                  <span className="text-xs text-indigo-600 flex-1 min-w-0 truncate">{f.name}</span>
+                  <span className="text-xs text-gray-400 shrink-0">{formatSize(f.size)}</span>
+                  <button
+                    type="button"
+                    onClick={() => removePendingFile(i)}
+                    className="p-0.5 text-gray-400 hover:text-red-500 transition-colors"
+                    title="취소"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+
+              {/* 파일 추가 버튼 */}
+              {canAddMore ? (
+                <label className="inline-flex items-center gap-1 text-xs text-[#80766b] hover:text-[#6e645a] cursor-pointer transition-colors">
+                  <input
+                    type="file"
+                    accept={ACCEPTED_TYPES}
+                    className="hidden"
+                    onChange={handleFileSelect}
+                  />
+                  <Paperclip className="w-3.5 h-3.5" />
+                  파일 추가 ({totalFileCount}/{MAX_FILES})
+                </label>
+              ) : (
+                <p className="text-xs text-gray-400">최대 {MAX_FILES}개까지 첨부 가능합니다.</p>
+              )}
+
+              {formFileError && (
+                <p className="text-xs text-red-500">{formFileError}</p>
+              )}
+            </div>
+
             <div className="flex items-center justify-between">
               <button
                 type="button"
@@ -230,10 +331,18 @@ export default function Notices() {
                   disabled={!titleInput.trim() || !contentInput.trim() || saving}
                   className="px-4 py-2 text-sm text-white bg-[#80766b] rounded-lg hover:bg-[#6e645a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
-                  {saving ? '저장 중...' : formMode === 'add' ? '등록' : '저장'}
+                  {saving ? (
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      저장 중...
+                    </span>
+                  ) : formMode === 'add' ? '등록' : '저장'}
                 </button>
               </div>
             </div>
+            {saveError && (
+              <p className="text-xs text-red-500 text-right">{saveError}</p>
+            )}
           </div>
         </Card>
       )}
@@ -244,8 +353,6 @@ export default function Notices() {
           {notices.map((notice) => {
             const expanded = expandedIds.has(notice.id);
             const isPublic = notice.isPublic !== false;
-            const isUploading = uploadingId === notice.id;
-            const fileError = uploadError?.id === notice.id ? uploadError.msg : null;
 
             return (
               <div key={notice.id} id={notice.id} className="scroll-mt-4">
@@ -285,59 +392,26 @@ export default function Notices() {
                       )}
                     </button>
 
-                    {/* ── 파일 섹션 (펼쳐진 경우) ── */}
-                    {expanded && (
-                      <div className="mt-3 pt-3 border-t border-gray-100">
-                        {notice.files && notice.files.length > 0 && (
-                          <div className="space-y-1.5 mb-2">
-                            {notice.files.map((f) => (
-                              <div key={f.id} className="flex items-center gap-2">
-                                <FileText className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                                <span className="text-xs text-gray-600 flex-1 min-w-0 truncate">{f.fileName}</span>
-                                <span className="text-xs text-gray-400 shrink-0">{formatSize(f.fileSize)}</span>
-                                <button
-                                  onClick={() => handleDownload(f.id)}
-                                  disabled={downloadingId === f.id}
-                                  className="p-1 text-gray-400 hover:text-indigo-600 transition-colors disabled:opacity-50"
-                                  title="다운로드"
-                                >
-                                  {downloadingId === f.id
-                                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                    : <Download className="w-3.5 h-3.5" />}
-                                </button>
-                                <button
-                                  onClick={() => handleFileDelete(f.id)}
-                                  className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                                  title="파일 삭제"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ))}
+                    {/* ── 첨부 파일 (다운로드 전용) ── */}
+                    {expanded && notice.files && notice.files.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
+                        {notice.files.map((f) => (
+                          <div key={f.id} className="flex items-center gap-2">
+                            <FileText className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                            <span className="text-xs text-gray-600 flex-1 min-w-0 truncate">{f.fileName}</span>
+                            <span className="text-xs text-gray-400 shrink-0">{formatSize(f.fileSize)}</span>
+                            <button
+                              onClick={() => handleDownload(f.id)}
+                              disabled={downloadingId === f.id}
+                              className="p-1 text-gray-400 hover:text-indigo-600 transition-colors disabled:opacity-50"
+                              title="다운로드"
+                            >
+                              {downloadingId === f.id
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <Download className="w-3.5 h-3.5" />}
+                            </button>
                           </div>
-                        )}
-                        <label className={`inline-flex items-center gap-1 text-xs transition-colors ${
-                          isUploading
-                            ? 'text-gray-400'
-                            : 'text-[#80766b] hover:text-[#6e645a] cursor-pointer'
-                        }`}>
-                          <input
-                            type="file"
-                            accept={ACCEPTED_TYPES}
-                            className="hidden"
-                            disabled={isUploading}
-                            onChange={(e) => {
-                              handleFileUpload(notice.id, e.target.files?.[0]);
-                              e.target.value = '';
-                            }}
-                          />
-                          {isUploading
-                            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />업로드 중...</>
-                            : <><Paperclip className="w-3.5 h-3.5" />파일 추가</>}
-                        </label>
-                        {fileError && (
-                          <p className="text-xs text-red-500 mt-1">{fileError}</p>
-                        )}
+                        ))}
                       </div>
                     )}
                   </div>
