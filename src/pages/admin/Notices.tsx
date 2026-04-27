@@ -139,15 +139,27 @@ export default function Notices() {
   const canAddMore = totalFileCount < MAX_FILES;
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
     e.target.value = '';
-    if (!file) return;
-    if (file.size > MAX_FILE_BYTES) {
-      setFormFileError('파일 크기는 20MB를 초과할 수 없습니다.');
-      return;
+    if (files.length === 0) return;
+
+    const remaining = MAX_FILES - totalFileCount;
+    const candidates = files.slice(0, remaining);
+    const valid = candidates.filter((f) => f.size <= MAX_FILE_BYTES);
+    const hasOversized = candidates.some((f) => f.size > MAX_FILE_BYTES);
+    const hasTooMany = files.length > remaining;
+
+    if (hasOversized && hasTooMany) {
+      setFormFileError(`최대 ${MAX_FILES}개까지 첨부 가능하며, 20MB를 초과한 파일은 제외되었습니다.`);
+    } else if (hasOversized) {
+      setFormFileError('20MB를 초과한 파일은 제외되었습니다.');
+    } else if (hasTooMany) {
+      setFormFileError(`최대 ${MAX_FILES}개까지 첨부 가능합니다.`);
+    } else {
+      setFormFileError(null);
     }
-    setFormFileError(null);
-    setPendingFiles((prev) => [...prev, file]);
+
+    if (valid.length > 0) setPendingFiles((prev) => [...prev, ...valid]);
   };
 
   const removePendingFile = (index: number) => {
@@ -324,6 +336,7 @@ export default function Notices() {
                   <input
                     type="file"
                     accept={ACCEPTED_TYPES}
+                    multiple
                     className="hidden"
                     onChange={handleFileSelect}
                   />
