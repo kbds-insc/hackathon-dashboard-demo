@@ -14,7 +14,20 @@ import NoticeContent from '../../components/ui/NoticeContent';
 
 type FormMode = 'add' | 'edit';
 
-const ACCEPTED_TYPES = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.txt,.zip';
+const ACCEPTED_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'text/plain',
+  'application/zip',
+].join(',');
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_FILES = 3;
 
