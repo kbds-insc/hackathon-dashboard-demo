@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
 import StatCard from '../../components/ui/StatCard';
@@ -9,6 +10,8 @@ import { useScores } from '../../hooks/useScores';
 import { useSettings } from '../../hooks/useSettings';
 import { useNotices } from '../../hooks/useNotices';
 import { useMilestones } from '../../hooks/useMilestones';
+import { apiFetchAllSubmissionFiles } from '../../api/submissionFiles';
+import type { SubmissionFile } from '../../api/submissionFiles';
 import { Users, Flag, FileCheck, Trophy, ChevronRight, Lock } from 'lucide-react';
 
 const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -38,6 +41,15 @@ export default function Dashboard() {
   const settings = useSettings();
   const { data: notices } = useNotices();
   const { data: allMilestones } = useMilestones();
+  const [submissionFiles, setSubmissionFiles] = useState<SubmissionFile[]>([]);
+
+  useEffect(() => {
+    apiFetchAllSubmissionFiles().then(setSubmissionFiles).catch(console.error);
+  }, []);
+
+  const interimUploadedSet = new Set(
+    submissionFiles.filter((f) => f.fileType === 'interim').map((f) => f.teamId)
+  );
 
   const milestones = allMilestones;
   const doneMilestones = milestones.filter((m) => m.isDone);
@@ -309,6 +321,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {teams.map((team) => {
             const submitted = team.submitStatus === 'submitted';
+            const hasInterim = interimUploadedSet.has(team.id);
             return (
               <div
                 key={team.id}
@@ -324,7 +337,20 @@ export default function Dashboard() {
                   </p>
                   <p className="text-xs text-gray-400 mt-0.5">팀원 {team.members.length}명</p>
                 </div>
-                <Badge status={team.submitStatus} />
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-gray-400">중간</span>
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                      hasInterim ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'
+                    }`}>
+                      {hasInterim ? '업로드' : '-'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-gray-400">최종</span>
+                    <Badge status={team.submitStatus} />
+                  </div>
+                </div>
               </div>
             );
           })}

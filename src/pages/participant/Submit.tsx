@@ -569,20 +569,47 @@ export default function Submit() {
     onDownload: handleDownload,
   };
 
+  const statusGrid = (
+    <div className="grid grid-cols-2 gap-3 mb-6">
+      <div className={`flex items-center gap-3 rounded-xl border px-4 py-3.5 ${
+        interimFile ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-200'
+      }`}>
+        {interimFile
+          ? <CheckCircle2 className="w-7 h-7 text-green-500 shrink-0" />
+          : <AlertCircle className="w-7 h-7 text-gray-300 shrink-0" />
+        }
+        <div className="min-w-0">
+          <p className={`text-xs font-semibold ${interimFile ? 'text-green-800' : 'text-gray-500'}`}>중간 점검</p>
+          <p className={`text-xs mt-0.5 ${interimFile ? 'text-green-600' : 'text-gray-400'}`}>
+            {interimFile ? '업로드 완료' : '미업로드'}
+          </p>
+        </div>
+      </div>
+      <div className={`flex items-center gap-3 rounded-xl border px-4 py-3.5 ${
+        submitted ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-200'
+      }`}>
+        {submitted
+          ? <CheckCircle2 className="w-7 h-7 text-green-500 shrink-0" />
+          : <AlertCircle className="w-7 h-7 text-gray-300 shrink-0" />
+        }
+        <div className="min-w-0">
+          <p className={`text-xs font-semibold ${submitted ? 'text-green-800' : 'text-gray-500'}`}>최종 제출</p>
+          <p className={`text-xs mt-0.5 truncate ${submitted ? 'text-green-600' : 'text-gray-400'}`}>
+            {submitted ? `${submission?.submittedAt ?? ''} 제출됨` : '미제출'}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+
   // 팀원(비팀장)은 제출 내역 조회만 가능
   if (!isLeader) {
     return (
       <ParticipantLayout>
+        {statusGrid}
         <InterimCard isLeader={false} {...interimCardProps} />
         {submitted ? (
           <>
-            <div className="flex items-center gap-4 rounded-xl border px-5 py-4 mb-6 bg-green-50 border-green-100">
-              <CheckCircle2 className="w-9 h-9 text-green-500 shrink-0" />
-              <div>
-                <p className="font-semibold text-green-800">제출 완료</p>
-                <p className="text-xs mt-0.5 text-green-600">{submission!.submittedAt} 제출됨</p>
-              </div>
-            </div>
             <SubmissionReadOnly
               submission={submission!}
               slidesFile={slidesFile}
@@ -609,6 +636,7 @@ export default function Submit() {
   if (!submissionOpen && !submitted) {
     return (
       <ParticipantLayout>
+        {statusGrid}
         <InterimCard isLeader={true} {...interimCardProps} />
         <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
           <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center">
@@ -712,26 +740,7 @@ export default function Submit() {
 
   return (
     <ParticipantLayout>
-      {/* 현재 제출 상태 */}
-      <div
-        className={`flex items-center gap-4 rounded-xl border px-5 py-4 mb-6 ${
-          submitted ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-200'
-        }`}
-      >
-        {submitted ? (
-          <CheckCircle2 className="w-9 h-9 text-green-500 shrink-0" />
-        ) : (
-          <AlertCircle className="w-9 h-9 text-gray-400 shrink-0" />
-        )}
-        <div>
-          <p className={`font-semibold ${submitted ? 'text-green-800' : 'text-gray-700'}`}>
-            {submitted ? '제출 완료' : '미제출'}
-          </p>
-          <p className={`text-xs mt-0.5 ${submitted ? 'text-green-600' : 'text-gray-400'}`}>
-            {submitted ? `${submission!.submittedAt} 제출됨` : '아직 제출하지 않았습니다.'}
-          </p>
-        </div>
-      </div>
+      {statusGrid}
 
       {/* 중간 점검 자료 */}
       <InterimCard isLeader={true} {...interimCardProps} />
@@ -748,7 +757,7 @@ export default function Submit() {
                 <li>• 제출 마감 이후 접수된 결과물은 심사에서 제외될 수 있습니다.</li>
               </ul>
             </div>
-            <Card title="결과물 수정">
+            <Card title="최종 결과물 수정">
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">
@@ -844,7 +853,7 @@ export default function Submit() {
           </div>
 
           {/* 제출 폼 */}
-          <Card title="결과물 제출">
+          <Card title="최종 결과물 제출">
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">

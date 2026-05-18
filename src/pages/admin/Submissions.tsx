@@ -48,6 +48,7 @@ export default function Submissions() {
   });
 
   const submittedCount = teams.filter((t) => t.submitStatus === 'submitted').length;
+  const interimCount = teams.filter((t) => interimFileMap[t.id] !== undefined).length;
   const total = teams.length;
 
   const handleDownload = async (fileId: string) => {
@@ -64,46 +65,52 @@ export default function Submissions() {
 
   return (
     <AdminLayout>
-      {/* 요약 배너 */}
-      <div
-        className={`flex items-center gap-4 rounded-xl border px-5 py-4 mb-6 ${
-          submittedCount === total && total > 0
-            ? 'bg-green-50 border-green-100'
-            : 'bg-indigo-50 border-indigo-100'
-        }`}
-      >
-        <FileCheck
-          className={`w-9 h-9 shrink-0 ${
-            submittedCount === total && total > 0 ? 'text-green-500' : 'text-indigo-500'
-          }`}
-        />
-        <div>
-          <p
-            className={`font-semibold text-base ${
-              submittedCount === total && total > 0 ? 'text-green-800' : 'text-indigo-800'
-            }`}
-          >
-            제출 완료 {submittedCount}/{total}팀
-          </p>
-          <p
-            className={`text-xs mt-0.5 ${
-              submittedCount === total && total > 0 ? 'text-green-600' : 'text-indigo-500'
-            }`}
-          >
-            {submittedCount === total && total > 0
-              ? '모든 팀이 제출을 완료했습니다.'
-              : `${total - submittedCount}팀이 아직 제출하지 않았습니다.`}
-          </p>
+      {/* 요약 배너: 중간/최종 분리 */}
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        {/* 중간 점검 */}
+        <div className={`flex items-center gap-3 sm:gap-4 rounded-xl border px-4 sm:px-5 py-4 ${
+          interimCount === total && total > 0 ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-200'
+        }`}>
+          <FileText className={`w-8 h-8 shrink-0 ${interimCount === total && total > 0 ? 'text-blue-500' : 'text-gray-400'}`} />
+          <div className="min-w-0">
+            <p className={`font-semibold text-sm sm:text-base truncate ${interimCount === total && total > 0 ? 'text-blue-800' : 'text-gray-700'}`}>
+              중간 점검 {interimCount}/{total}팀
+            </p>
+            <p className={`text-xs mt-0.5 ${interimCount === total && total > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+              {interimCount === total && total > 0
+                ? '모든 팀이 업로드했습니다.'
+                : `${total - interimCount}팀 미업로드`}
+            </p>
+          </div>
+          <div className="ml-auto hidden sm:block text-right shrink-0">
+            <p className={`text-xl font-bold ${interimCount === total && total > 0 ? 'text-blue-600' : 'text-gray-500'}`}>
+              {total > 0 ? Math.round((interimCount / total) * 100) : 0}%
+            </p>
+            <p className="text-xs text-gray-400">업로드율</p>
+          </div>
         </div>
-        <div className="ml-auto hidden sm:block text-right">
-          <p
-            className={`text-2xl font-bold ${
-              submittedCount === total && total > 0 ? 'text-green-600' : 'text-indigo-600'
-            }`}
-          >
-            {total > 0 ? Math.round((submittedCount / total) * 100) : 0}%
-          </p>
-          <p className="text-xs text-gray-400">완료율</p>
+
+        {/* 최종 제출 */}
+        <div className={`flex items-center gap-3 sm:gap-4 rounded-xl border px-4 sm:px-5 py-4 ${
+          submittedCount === total && total > 0 ? 'bg-green-50 border-green-100' : 'bg-indigo-50 border-indigo-100'
+        }`}>
+          <FileCheck className={`w-8 h-8 shrink-0 ${submittedCount === total && total > 0 ? 'text-green-500' : 'text-indigo-500'}`} />
+          <div className="min-w-0">
+            <p className={`font-semibold text-sm sm:text-base truncate ${submittedCount === total && total > 0 ? 'text-green-800' : 'text-indigo-800'}`}>
+              최종 제출 {submittedCount}/{total}팀
+            </p>
+            <p className={`text-xs mt-0.5 ${submittedCount === total && total > 0 ? 'text-green-600' : 'text-indigo-500'}`}>
+              {submittedCount === total && total > 0
+                ? '모든 팀이 제출을 완료했습니다.'
+                : `${total - submittedCount}팀 미제출`}
+            </p>
+          </div>
+          <div className="ml-auto hidden sm:block text-right shrink-0">
+            <p className={`text-xl font-bold ${submittedCount === total && total > 0 ? 'text-green-600' : 'text-indigo-600'}`}>
+              {total > 0 ? Math.round((submittedCount / total) * 100) : 0}%
+            </p>
+            <p className="text-xs text-gray-400">완료율</p>
+          </div>
         </div>
       </div>
 
@@ -121,7 +128,20 @@ export default function Submissions() {
             <Card key={team.id} className={submitted ? '' : 'opacity-60'}>
               <div className="flex items-start justify-between mb-3">
                 <h3 className="font-semibold text-gray-800">{team.name}</h3>
-                <Badge status={team.submitStatus} />
+                <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-gray-400">중간</span>
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                      interimFile ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'
+                    }`}>
+                      {interimFile ? '업로드' : '미업로드'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-gray-400">최종</span>
+                    <Badge status={team.submitStatus} />
+                  </div>
+                </div>
               </div>
 
               {submitted && detail ? (
