@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import ParticipantLayout from '../../components/layout/ParticipantLayout';
 import Card from '../../components/ui/Card';
@@ -7,6 +8,8 @@ import { useNotices } from '../../hooks/useNotices';
 import { useMilestones } from '../../hooks/useMilestones';
 import { useScores } from '../../hooks/useScores';
 import { useSettings } from '../../hooks/useSettings';
+import { apiFetchSubmissionFile } from '../../api/submissionFiles';
+import type { SubmissionFile } from '../../api/submissionFiles';
 import { Crown, Trophy, ChevronRight, CheckCircle2, Clock } from 'lucide-react';
 
 function getDday(dateStr: string): number {
@@ -30,6 +33,12 @@ export default function ParticipantDashboard() {
   const { data: allMilestones } = useMilestones();
   const allScores = useScores();
   const settings = useSettings();
+  const [interimFile, setInterimFile] = useState<SubmissionFile | null>(null);
+
+  useEffect(() => {
+    if (!team?.id) return;
+    apiFetchSubmissionFile(team.id, 'interim').then(setInterimFile).catch(console.error);
+  }, [team?.id]);
 
   // 팀원 목록
   const teamMembers = team ? allParticipants.filter((p) => p.team === team.id) : [];
@@ -255,35 +264,49 @@ export default function ParticipantDashboard() {
 
       {/* ── ④ 제출 현황 ── */}
       {team && !evaluationDone && (
-        <Card title="제출 현황" className="mb-5">
-          <div
-            className={`flex items-center gap-4 p-4 rounded-xl border ${
-              team.submit_status === 'submitted'
-                ? 'bg-green-50 border-green-100'
-                : 'bg-gray-50 border-gray-200'
-            }`}
-          >
-            {team.submit_status === 'submitted' ? (
-              <CheckCircle2 className="w-8 h-8 text-green-500 shrink-0" />
-            ) : (
-              <Clock className="w-8 h-8 text-gray-400 shrink-0" />
-            )}
-            <div className="flex-1 min-w-0">
-              <p className={`font-semibold ${team.submit_status === 'submitted' ? 'text-green-800' : 'text-gray-600'}`}>
-                {team.submit_status === 'submitted' ? '제출 완료' : '아직 제출하지 않았습니다'}
-              </p>
-              <p className={`text-xs mt-0.5 ${team.submit_status === 'submitted' ? 'text-green-600' : 'text-gray-400'}`}>
-                {team.submit_status === 'submitted'
-                  ? '심사위원회에서 검토 중입니다.'
-                  : '제출하기 메뉴에서 결과물을 제출해주세요.'}
-              </p>
-            </div>
+        <Card
+          title="제출 현황"
+          className="mb-5"
+          headerRight={
             <Link
               to="/participant/submit"
-              className="flex items-center gap-0.5 text-xs font-medium text-[#80766b] hover:text-[#6e645a] transition-colors shrink-0"
+              className="flex items-center gap-0.5 text-xs font-medium text-[#80766b] hover:text-[#6e645a] transition-colors"
             >
-              {team.submit_status === 'submitted' ? '확인' : '제출하기'} <ChevronRight className="w-3.5 h-3.5" />
+              제출하기 <ChevronRight className="w-3.5 h-3.5" />
             </Link>
+          }
+        >
+          <div className="grid grid-cols-2 gap-3">
+            {/* 중간 점검 */}
+            <div className={`flex items-center gap-3 p-3 rounded-xl border ${
+              interimFile ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-200'
+            }`}>
+              {interimFile
+                ? <CheckCircle2 className="w-7 h-7 text-green-500 shrink-0" />
+                : <Clock className="w-7 h-7 text-gray-300 shrink-0" />
+              }
+              <div className="min-w-0">
+                <p className={`text-xs font-semibold ${interimFile ? 'text-green-800' : 'text-gray-500'}`}>중간 점검</p>
+                <p className={`text-xs mt-0.5 ${interimFile ? 'text-green-600' : 'text-gray-400'}`}>
+                  {interimFile ? '업로드 완료' : '미업로드'}
+                </p>
+              </div>
+            </div>
+            {/* 최종 제출 */}
+            <div className={`flex items-center gap-3 p-3 rounded-xl border ${
+              team.submit_status === 'submitted' ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-200'
+            }`}>
+              {team.submit_status === 'submitted'
+                ? <CheckCircle2 className="w-7 h-7 text-green-500 shrink-0" />
+                : <Clock className="w-7 h-7 text-gray-300 shrink-0" />
+              }
+              <div className="min-w-0">
+                <p className={`text-xs font-semibold ${team.submit_status === 'submitted' ? 'text-green-800' : 'text-gray-500'}`}>최종 제출</p>
+                <p className={`text-xs mt-0.5 ${team.submit_status === 'submitted' ? 'text-green-600' : 'text-gray-400'}`}>
+                  {team.submit_status === 'submitted' ? '심사 검토 중' : '미제출'}
+                </p>
+              </div>
+            </div>
           </div>
         </Card>
       )}

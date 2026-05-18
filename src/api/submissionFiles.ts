@@ -27,6 +27,7 @@ export interface SubmissionFile {
   fileName: string;
   fileSize: number;
   mimeType: string;
+  fileType: 'final' | 'interim';
   uploadedAt: string;
 }
 
@@ -36,6 +37,7 @@ interface DBSubmissionFile {
   file_name: string;
   file_size: number;
   mime_type: string;
+  file_type: string;
   uploaded_at: string;
 }
 
@@ -46,15 +48,20 @@ function fromDB(row: DBSubmissionFile): SubmissionFile {
     fileName: row.file_name,
     fileSize: row.file_size,
     mimeType: row.mime_type,
+    fileType: (row.file_type ?? 'final') as 'final' | 'interim',
     uploadedAt: row.uploaded_at,
   };
 }
 
-export async function apiFetchSubmissionFile(teamId: string): Promise<SubmissionFile | null> {
+export async function apiFetchSubmissionFile(
+  teamId: string,
+  fileType: 'final' | 'interim' = 'final',
+): Promise<SubmissionFile | null> {
   const { data, error } = await supabase
     .from('submission_files')
     .select('*')
     .eq('team_id', teamId)
+    .eq('file_type', fileType)
     .order('uploaded_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -75,12 +82,14 @@ export async function apiGetSubmissionUploadUrl(
   fileName: string,
   fileSize: number,
   mimeType: string,
+  fileType: 'final' | 'interim' = 'final',
 ): Promise<{ uploadUrl: string; fileId: string }> {
   const data = await call('upload-url', {
     team_id: teamId,
     file_name: fileName,
     file_size: fileSize,
     mime_type: mimeType,
+    file_type: fileType,
   });
   return { uploadUrl: data.upload_url, fileId: data.file_id };
 }
