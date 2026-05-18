@@ -412,3 +412,11 @@ CREATE POLICY "read" ON submission_files
   FOR SELECT USING (auth.role() = 'authenticated');
 
 -- 파일 추가/삭제는 Edge Function이 service_role로 처리 (별도 정책 불필요)
+
+-- ============================================================
+-- MIGRATION: submission_files 파일 유형 구분 (중간 점검 / 최종 제출)
+-- ============================================================
+
+ALTER TABLE submission_files
+  ADD COLUMN IF NOT EXISTS file_type text NOT NULL DEFAULT 'final'
+  CONSTRAINT chk_file_type CHECK (file_type IN ('final', 'interim'));
