@@ -105,18 +105,24 @@ Deno.serve(async (req: Request) => {
 
   // ── 업로드 URL 발급 (팀장 또는 admin) ─────────────────────────
   if (action === "upload-url") {
-    const { team_id, file_name, file_size, mime_type } = body;
+    const { team_id, file_name, file_size, mime_type, file_type = "final" } = body;
     if (!team_id || !file_name || !file_size || !mime_type) {
       return json(
         { error: "team_id, file_name, file_size, mime_type은 필수입니다." },
         400,
       );
     }
+    if (!["final", "interim"].includes(file_type as string)) {
+      return json({ error: "file_type은 'final' 또는 'interim'이어야 합니다." }, 400);
+    }
 
     if (!isAdmin) {
       const callerTeam = await getCallerTeam();
       if (!callerTeam || callerTeam.teamId !== team_id) {
         return json({ error: "Forbidden" }, 403);
+      }
+      if (!callerTeam.isLeader) {
+        return json({ error: "팀장만 파일을 업로드할 수 있습니다." }, 403);
       }
     }
 
@@ -156,6 +162,7 @@ Deno.serve(async (req: Request) => {
         s3_key: s3Key,
         file_size: file_size as number,
         mime_type: mime_type as string,
+        file_type: file_type as string,
       })
       .select()
       .single();

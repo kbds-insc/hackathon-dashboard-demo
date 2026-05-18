@@ -40,7 +40,12 @@ export default function Submissions() {
   }, []);
 
   const submissionMap = Object.fromEntries(submissions.map((s) => [s.teamId, s]));
-  const submissionFileMap = Object.fromEntries(submissionFiles.map((f) => [f.teamId, f]));
+  const finalFileMap: Record<string, SubmissionFile> = {};
+  const interimFileMap: Record<string, SubmissionFile> = {};
+  submissionFiles.forEach((f) => {
+    if (f.fileType === 'interim') interimFileMap[f.teamId] = f;
+    else finalFileMap[f.teamId] = f;
+  });
 
   const submittedCount = teams.filter((t) => t.submitStatus === 'submitted').length;
   const total = teams.length;
@@ -107,7 +112,8 @@ export default function Submissions() {
         {teams.map((team) => {
           const submitted = team.submitStatus === 'submitted';
           const detail = submissionMap[team.id];
-          const slideFile = submissionFileMap[team.id] ?? null;
+          const slideFile = finalFileMap[team.id] ?? null;
+          const interimFile = interimFileMap[team.id] ?? null;
           const githubHref = detail ? getSafeHttpsHref(detail.githubUrl) : null;
           const slidesHref = detail?.slidesUrl ? getSafeHttpsHref(detail.slidesUrl) : null;
 
@@ -221,6 +227,28 @@ export default function Submissions() {
                   <span>
                     {submitted ? '제출 데이터를 불러오는 중...' : '아직 제출하지 않은 팀입니다.'}
                   </span>
+                </div>
+              )}
+
+              {interimFile && (
+                <div className="border-t border-gray-100 pt-2 mt-3">
+                  <p className="text-xs text-gray-400 mb-1.5">중간 점검 자료</p>
+                  <button
+                    onClick={() => handleDownload(interimFile.id)}
+                    disabled={downloadingFileId === interimFile.id}
+                    className="flex items-center gap-2.5 text-sm text-gray-700 hover:text-[#80766b] transition-colors group w-full text-left disabled:opacity-50"
+                  >
+                    <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-gray-100 group-hover:bg-[#80766b]/10 transition-colors shrink-0">
+                      <FileText className="w-4 h-4 text-gray-600 group-hover:text-[#80766b]" />
+                    </span>
+                    <span className="flex-1 font-medium truncate">{interimFile.fileName}</span>
+                    <span className="text-xs text-gray-400 shrink-0">{formatSize(interimFile.fileSize)}</span>
+                    {downloadingFileId === interimFile.id ? (
+                      <Loader2 className="w-3.5 h-3.5 shrink-0 text-gray-400 animate-spin" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5 shrink-0 text-gray-400" />
+                    )}
+                  </button>
                 </div>
               )}
             </Card>

@@ -199,6 +199,122 @@ function SlidesModeToggle({
   );
 }
 
+function InterimCard({
+  isLeader,
+  interimFile,
+  interimSelectedFile,
+  interimFileError,
+  savingInterim,
+  downloadingFileId,
+  interimFileInputRef,
+  onFileSelect,
+  onUpload,
+  onCancelSelect,
+  onDownload,
+}: {
+  isLeader: boolean;
+  interimFile: SubmissionFile | null;
+  interimSelectedFile: File | null;
+  interimFileError: string | null;
+  savingInterim: boolean;
+  downloadingFileId: string | null;
+  interimFileInputRef: React.RefObject<HTMLInputElement | null>;
+  onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onUpload: () => void;
+  onCancelSelect: () => void;
+  onDownload: (id: string) => void;
+}) {
+  return (
+    <Card title="중간 점검 자료" className="mb-5">
+      {interimFile && !interimSelectedFile ? (
+        <div className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg bg-gray-50">
+          <FileText className="w-4 h-4 text-indigo-400 shrink-0" />
+          <span className="text-xs text-gray-700 flex-1 min-w-0 truncate">{interimFile.fileName}</span>
+          <span className="text-xs text-gray-400 shrink-0">{formatSize(interimFile.fileSize)}</span>
+          <button
+            type="button"
+            onClick={() => onDownload(interimFile.id)}
+            disabled={downloadingFileId === interimFile.id}
+            className="text-gray-400 hover:text-gray-600 disabled:opacity-50 shrink-0"
+          >
+            {downloadingFileId === interimFile.id ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Download className="w-3.5 h-3.5" />
+            )}
+          </button>
+          {isLeader && (
+            <button
+              type="button"
+              onClick={() => interimFileInputRef.current?.click()}
+              className="text-xs text-[#80766b] hover:underline shrink-0"
+            >
+              변경
+            </button>
+          )}
+        </div>
+      ) : interimSelectedFile ? (
+        <div className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg bg-gray-50">
+          <FileText className="w-4 h-4 text-indigo-400 shrink-0" />
+          <span className="text-xs text-gray-700 flex-1 min-w-0 truncate">{interimSelectedFile.name}</span>
+          <span className="text-xs text-gray-400 shrink-0">{formatSize(interimSelectedFile.size)}</span>
+          <button
+            type="button"
+            onClick={onCancelSelect}
+            className="text-gray-400 hover:text-gray-600 shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ) : isLeader ? (
+        <button
+          type="button"
+          onClick={() => interimFileInputRef.current?.click()}
+          className="w-full flex flex-col items-center gap-1.5 px-3 py-4 border border-dashed border-gray-300 rounded-lg hover:border-[#80766b]/50 hover:bg-gray-50 transition-colors"
+        >
+          <Paperclip className="w-4 h-4 text-gray-400" />
+          <span className="text-xs text-gray-500">파일 선택 (최대 20MB)</span>
+          <span className="text-[10px] text-gray-400">PDF, PPT, PPTX, DOCX, ZIP 등</span>
+        </button>
+      ) : (
+        <p className="text-sm text-gray-400">아직 업로드된 파일이 없습니다.</p>
+      )}
+
+      {isLeader && (
+        <input
+          ref={interimFileInputRef}
+          type="file"
+          accept={ACCEPTED_ATTR}
+          onChange={onFileSelect}
+          className="hidden"
+        />
+      )}
+
+      {interimFileError && <p className="mt-1 text-xs text-red-600">{interimFileError}</p>}
+
+      {isLeader && interimSelectedFile && (
+        <div className="flex gap-2 justify-end mt-3">
+          <button
+            type="button"
+            onClick={onCancelSelect}
+            className="px-4 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={onUpload}
+            disabled={savingInterim}
+            className="px-4 py-2 bg-[#80766b] text-white text-sm font-semibold rounded-lg hover:bg-[#6e645a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {savingInterim ? '업로드 중...' : '업로드'}
+          </button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default function Submit() {
   const { participant, team, loading: teamLoading } = useCurrentParticipant();
   const settings = useSettings();
@@ -208,6 +324,7 @@ export default function Submit() {
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [loadingSubmission, setLoadingSubmission] = useState(true);
   const [slidesFile, setSlidesFile] = useState<SubmissionFile | null>(null);
+  const [interimFile, setInterimFile] = useState<SubmissionFile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
 
@@ -222,13 +339,23 @@ export default function Submit() {
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [interimSelectedFile, setInterimSelectedFile] = useState<File | null>(null);
+  const [interimFileError, setInterimFileError] = useState<string | null>(null);
+  const [savingInterim, setSavingInterim] = useState(false);
+  const interimFileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (!team?.id) return;
     setLoadingSubmission(true);
-    Promise.all([apiFetchSubmission(team.id), apiFetchSubmissionFile(team.id)])
-      .then(([sub, file]) => {
+    Promise.all([
+      apiFetchSubmission(team.id),
+      apiFetchSubmissionFile(team.id, 'final'),
+      apiFetchSubmissionFile(team.id, 'interim'),
+    ])
+      .then(([sub, file, interim]) => {
         setSubmission(sub);
         setSlidesFile(file);
+        setInterimFile(interim);
         if (sub) {
           setGithub(sub.githubUrl);
           setSlides(sub.slidesUrl);
@@ -278,6 +405,25 @@ export default function Submit() {
     setSelectedFile(file);
   };
 
+  const handleInterimFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    setInterimFileError(null);
+    if (!file) { setInterimSelectedFile(null); return; }
+    if (file.size > MAX_FILE_BYTES) {
+      setInterimFileError('파일 크기는 20MB를 초과할 수 없습니다.');
+      setInterimSelectedFile(null);
+      e.target.value = '';
+      return;
+    }
+    if (!ACCEPTED_MIME_TYPES.includes(file.type)) {
+      setInterimFileError('허용되지 않는 파일 형식입니다.');
+      setInterimSelectedFile(null);
+      e.target.value = '';
+      return;
+    }
+    setInterimSelectedFile(file);
+  };
+
   const handleDownload = async (fileId: string) => {
     setDownloadingFileId(fileId);
     try {
@@ -287,6 +433,39 @@ export default function Submit() {
       console.error('다운로드 실패');
     } finally {
       setDownloadingFileId(null);
+    }
+  };
+
+  const handleInterimUpload = async () => {
+    if (!interimSelectedFile || !team?.id) return;
+    setSavingInterim(true);
+    try {
+      if (interimFile) {
+        await apiDeleteSubmissionFile(interimFile.id).catch(() => {});
+      }
+      let fileId: string | null = null;
+      try {
+        const { uploadUrl, fileId: id } = await apiGetSubmissionUploadUrl(
+          team.id,
+          interimSelectedFile.name,
+          interimSelectedFile.size,
+          interimSelectedFile.type,
+          'interim',
+        );
+        fileId = id;
+        await apiUploadSubmissionToS3(uploadUrl, interimSelectedFile);
+      } catch (err) {
+        if (fileId) await apiDeleteSubmissionFileRecord(fileId).catch(() => {});
+        throw err;
+      }
+      const updated = await apiFetchSubmissionFile(team.id, 'interim');
+      setInterimFile(updated);
+      setInterimSelectedFile(null);
+      if (interimFileInputRef.current) interimFileInputRef.current.value = '';
+    } catch {
+      console.error('중간 점검 업로드 실패');
+    } finally {
+      setSavingInterim(false);
     }
   };
 
@@ -304,14 +483,12 @@ export default function Submit() {
 
     setSaving(true);
     try {
-      // upsert submission (파일 모드면 slides_url 비워서 저장)
       await apiUpsertSubmission(team.id, {
         githubUrl: github.trim(),
         slidesUrl: slidesMode === 'url' ? slides.trim() : '',
         description: description.trim(),
       });
 
-      // 파일 모드: 기존 파일 삭제 후 새 파일 업로드
       if (slidesMode === 'file' && selectedFile) {
         if (slidesFile) {
           await apiDeleteSubmissionFile(slidesFile.id).catch(() => {});
@@ -323,6 +500,7 @@ export default function Submit() {
             selectedFile.name,
             selectedFile.size,
             selectedFile.type,
+            'final',
           );
           fileId = id;
           await apiUploadSubmissionToS3(uploadUrl, selectedFile);
@@ -332,15 +510,13 @@ export default function Submit() {
         }
       }
 
-      // URL 모드로 전환했을 때 기존 파일 삭제
       if (slidesMode === 'url' && slidesFile) {
         await apiDeleteSubmissionFile(slidesFile.id).catch(() => {});
       }
 
-      // 상태 갱신
       const [updated, updatedFile] = await Promise.all([
         apiFetchSubmission(team.id),
-        apiFetchSubmissionFile(team.id),
+        apiFetchSubmissionFile(team.id, 'final'),
       ]);
       setSubmission(updated);
       setSlidesFile(updatedFile);
@@ -377,10 +553,27 @@ export default function Submit() {
     );
   }
 
+  const interimCardProps = {
+    interimFile,
+    interimSelectedFile,
+    interimFileError,
+    savingInterim,
+    downloadingFileId,
+    interimFileInputRef,
+    onFileSelect: handleInterimFileSelect,
+    onUpload: handleInterimUpload,
+    onCancelSelect: () => {
+      setInterimSelectedFile(null);
+      if (interimFileInputRef.current) interimFileInputRef.current.value = '';
+    },
+    onDownload: handleDownload,
+  };
+
   // 팀원(비팀장)은 제출 내역 조회만 가능
   if (!isLeader) {
     return (
       <ParticipantLayout>
+        <InterimCard isLeader={false} {...interimCardProps} />
         {submitted ? (
           <>
             <div className="flex items-center gap-4 rounded-xl border px-5 py-4 mb-6 bg-green-50 border-green-100">
@@ -416,6 +609,7 @@ export default function Submit() {
   if (!submissionOpen && !submitted) {
     return (
       <ParticipantLayout>
+        <InterimCard isLeader={true} {...interimCardProps} />
         <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
           <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center">
             <Lock className="w-6 h-6 text-gray-400" />
@@ -539,7 +733,10 @@ export default function Submit() {
         </div>
       </div>
 
-      {/* 제출 완료 상태 */}
+      {/* 중간 점검 자료 */}
+      <InterimCard isLeader={true} {...interimCardProps} />
+
+      {/* 최종 제출 */}
       {submitted ? (
         isEditing ? (
           <>
