@@ -49,20 +49,24 @@ export default function ParticipantScores() {
   return (
     <ParticipantLayout>
       {/* 평가 기준 — 모든 참가자에게 항상 표시 */}
-      <Card title="평가 기준" className="mb-5">
-        <div className="divide-y divide-gray-100">
-          {SCORE_CRITERIA.map(({ key, label }, idx) => (
-            <div key={key} className={idx > 0 ? 'pt-4 mt-4' : ''}>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm font-semibold text-gray-800">{label}</span>
-                <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 shrink-0">
-                  {criteriaMax[key]}점
-                </span>
+      <div className="mb-5">
+        <h2 className="text-sm font-semibold text-gray-700 mb-3">평가 기준</h2>
+        <div className="grid grid-cols-1 gap-3">
+          {SCORE_CRITERIA.map(({ key, label }) => (
+            <div key={key} className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+              <div className="flex items-center gap-4 px-4 py-3 bg-indigo-50 border-b border-indigo-100">
+                <div className="flex flex-col items-center justify-center w-12 h-12 rounded-xl bg-indigo-600 shrink-0">
+                  <span className="text-xl font-black text-white leading-none">{criteriaMax[key]}</span>
+                  <span className="text-[10px] font-medium text-indigo-200 leading-none mt-0.5">점</span>
+                </div>
+                <span className="text-sm font-bold text-indigo-900">{label}</span>
               </div>
-              <ul className="space-y-1.5">
+              <ul className="px-4 py-3 space-y-2">
                 {(CRITERIA_DESCRIPTIONS[key] ?? []).map((desc, i) => (
-                  <li key={i} className="flex gap-2 text-xs text-gray-500 leading-relaxed">
-                    <span className="shrink-0 font-semibold text-gray-300">{i + 1}.</span>
+                  <li key={i} className="flex gap-2.5 text-xs text-gray-500 leading-relaxed">
+                    <span className="shrink-0 w-4 h-4 rounded-full bg-indigo-100 text-indigo-500 font-bold flex items-center justify-center text-[10px]">
+                      {i + 1}
+                    </span>
                     <span>{desc}</span>
                   </li>
                 ))}
@@ -70,7 +74,7 @@ export default function ParticipantScores() {
             </div>
           ))}
         </div>
-      </Card>
+      </div>
 
       {/* 평가 결과 */}
       <Card title="평가 결과">
