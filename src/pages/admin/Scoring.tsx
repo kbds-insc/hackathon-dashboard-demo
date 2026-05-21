@@ -201,12 +201,19 @@ export default function Scoring() {
                                     </p>
                                     {hasScore && js ? (
                                       <div className="space-y-0.5 text-gray-500">
-                                        <p>창의성/독창성 <span className="text-[#fcaf17] font-semibold">{js.creativity}</span></p>
-                                        <p>실용성 <span className="text-blue-600 font-semibold">{js.practicality}</span></p>
-                                        <p>완성도 <span className="text-[#80766b] font-semibold">{js.completion}</span></p>
-                                        <p>발표 <span className="text-green-600 font-semibold">{js.presentation}</span></p>
+                                        {SCORE_CRITERIA.map((c) => {
+                                          const textColor = {
+                                            creativity: 'text-[#fcaf17]',
+                                            practicality: 'text-blue-600',
+                                            completion: 'text-[#80766b]',
+                                            presentation: 'text-green-600',
+                                          } as const;
+                                          return (
+                                            <p key={c.key}>{c.label} <span className={`${textColor[c.key]} font-semibold`}>{js[c.key]}</span></p>
+                                          );
+                                        })}
                                         <p className="border-t border-gray-100 pt-1 mt-1 font-medium text-gray-700">
-                                          합계 {js.creativity + js.practicality + js.completion + js.presentation}
+                                          합계 {SCORE_CRITERIA.reduce((sum, c) => sum + js[c.key], 0)}
                                         </p>
                                       </div>
                                     ) : (
@@ -259,23 +266,22 @@ export default function Scoring() {
                 </div>
 
                 {row.total > 0 ? (
-                  <div className="grid grid-cols-4 gap-2 text-center">
-                    <div className="bg-[#fcaf17]/10 rounded-lg py-2">
-                      <p className="text-[#fcaf17] font-bold text-lg">{row.creativity}</p>
-                      <p className="text-gray-400 text-xs mt-0.5">창의성</p>
-                    </div>
-                    <div className="bg-blue-50 rounded-lg py-2">
-                      <p className="text-blue-600 font-bold text-lg">{row.practicality}</p>
-                      <p className="text-gray-400 text-xs mt-0.5">실용성</p>
-                    </div>
-                    <div className="bg-[#80766b]/10 rounded-lg py-2">
-                      <p className="text-[#80766b] font-bold text-lg">{row.completion}</p>
-                      <p className="text-gray-400 text-xs mt-0.5">완성도</p>
-                    </div>
-                    <div className="bg-green-50 rounded-lg py-2">
-                      <p className="text-green-600 font-bold text-lg">{row.presentation}</p>
-                      <p className="text-gray-400 text-xs mt-0.5">발표</p>
-                    </div>
+                  <div className="grid grid-cols-2 gap-2 text-center">
+                    {SCORE_CRITERIA.map((c) => {
+                      const colorMap = {
+                        creativity:   { text: 'text-[#fcaf17]',  bg: 'bg-[#fcaf17]/10' },
+                        practicality: { text: 'text-blue-600',   bg: 'bg-blue-50' },
+                        completion:   { text: 'text-[#80766b]',  bg: 'bg-[#80766b]/10' },
+                        presentation: { text: 'text-green-600',  bg: 'bg-green-50' },
+                      } as const;
+                      const color = colorMap[c.key];
+                      return (
+                        <div key={c.key} className={`${color.bg} rounded-lg py-2`}>
+                          <p className={`${color.text} font-bold text-lg`}>{row[c.key]}</p>
+                          <p className="text-gray-400 text-xs mt-0.5 leading-tight">{c.label}</p>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-xs text-gray-400">점수 미입력</p>
