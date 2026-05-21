@@ -32,7 +32,7 @@ export default function ParticipantDashboard() {
   const { data: notices } = useNotices({ publicOnly: true });
   const { data: allMilestones } = useMilestones();
   const allScores = useScores();
-  const settings = useSettings();
+  const { settings } = useSettings();
   const [interimFile, setInterimFile] = useState<SubmissionFile | null>(null);
 
   useEffect(() => {

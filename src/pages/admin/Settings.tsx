@@ -184,7 +184,7 @@ export default function AdminSettings() {
         <div className="space-y-3">
           {SCORE_CRITERIA.map((c) => (
             <div key={c.key} className="flex items-center gap-4">
-              <span className="text-sm text-gray-700 w-28 shrink-0">{c.label}</span>
+              <span className="text-sm text-gray-700 w-40 shrink-0 whitespace-nowrap">{c.label}</span>
               <input
                 type="number"
                 min={0}

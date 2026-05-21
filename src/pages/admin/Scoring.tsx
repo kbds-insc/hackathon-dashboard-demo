@@ -19,7 +19,7 @@ export default function Scoring() {
   const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
   const [toast, setToast] = useState('');
 
-  const settings = useSettings();
+  const { settings } = useSettings();
   const criteriaMax: Record<string, number> = {
     creativity: settings.creativityMax,
     practicality: settings.practicalityMax,

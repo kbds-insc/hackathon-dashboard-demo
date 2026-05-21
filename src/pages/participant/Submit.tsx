@@ -317,7 +317,7 @@ function InterimCard({
 
 export default function Submit() {
   const { participant, team, loading: teamLoading } = useCurrentParticipant();
-  const settings = useSettings();
+  const { settings } = useSettings();
   const submissionOpen = isSubmissionOpen(settings);
   const isLeader = participant?.isLeader ?? false;
 
