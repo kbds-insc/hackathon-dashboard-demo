@@ -27,7 +27,7 @@ const CRITERIA_DESCRIPTIONS: Record<string, string[]> = {
 export default function ParticipantScores() {
   const { team, loading } = useCurrentParticipant();
   const allScores = useScores();
-  const settings = useSettings();
+  const { settings, loaded: settingsLoaded } = useSettings();
 
   const criteriaMax: Record<string, number> = {
     creativity: settings.creativityMax,
@@ -56,8 +56,14 @@ export default function ParticipantScores() {
             <div key={key} className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
               <div className="flex items-center gap-4 px-4 py-3 bg-indigo-50 border-b border-indigo-100">
                 <div className="flex flex-col items-center justify-center w-12 h-12 rounded-xl bg-indigo-600 shrink-0">
-                  <span className="text-xl font-black text-white leading-none">{criteriaMax[key]}</span>
-                  <span className="text-[10px] font-medium text-indigo-200 leading-none mt-0.5">점</span>
+                  {settingsLoaded ? (
+                    <>
+                      <span className="text-xl font-black text-white leading-none">{criteriaMax[key]}</span>
+                      <span className="text-[10px] font-medium text-indigo-200 leading-none mt-0.5">점</span>
+                    </>
+                  ) : (
+                    <span className="w-8 h-3 bg-indigo-400 rounded animate-pulse" />
+                  )}
                 </div>
                 <span className="text-sm font-bold text-indigo-900">{label}</span>
               </div>
