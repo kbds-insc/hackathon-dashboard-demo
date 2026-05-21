@@ -6,6 +6,24 @@ import { useSettings } from '../../hooks/useSettings';
 import { SCORE_CRITERIA } from '../../data/scoreStore';
 import { Clock, Star, Trophy } from 'lucide-react';
 
+const CRITERIA_DESCRIPTIONS: Record<string, string[]> = {
+  creativity: [
+    '기존과 차별화된 혁신적인 아이디어인가?',
+    '내부 Pain Point를 차별화된 아이디어를 통해 해결할 수 있는가?',
+  ],
+  practicality: [
+    '기존 업무 프로세스 대비 Agent 도입 후 소요 시간이나 운영 비용이 획기적으로 줄어드는가?',
+    '실제 현업이나 비즈니스에 적용 가능한 현실적인 방안인가?',
+  ],
+  completion: [
+    '기술적으로 프로토타입이 안정적으로 작동하는가?',
+    '데이터를 처리하고 Agent의 작동 파이프라인이 효율적이고 안정적으로 작동하는가?',
+  ],
+  presentation: [
+    '서사 구조가 명확하며, 팀의 아이디어를 논리적으로 전달하고, 질의응답에 전문적으로 답하는가?',
+  ],
+};
+
 export default function ParticipantScores() {
   const { team, loading } = useCurrentParticipant();
   const allScores = useScores();
@@ -28,18 +46,37 @@ export default function ParticipantScores() {
       ? scoredTeams.filter((s) => s.total > myScore.total).length + 1
       : null;
 
-  if (loading) {
-    return (
-      <ParticipantLayout>
-        <p className="text-sm text-gray-400 text-center py-10">불러오는 중...</p>
-      </ParticipantLayout>
-    );
-  }
-
   return (
     <ParticipantLayout>
+      {/* 평가 기준 — 모든 참가자에게 항상 표시 */}
+      <Card title="평가 기준" className="mb-5">
+        <div className="divide-y divide-gray-100">
+          {SCORE_CRITERIA.map(({ key, label }, idx) => (
+            <div key={key} className={idx > 0 ? 'pt-4 mt-4' : ''}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm font-semibold text-gray-800">{label}</span>
+                <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 shrink-0">
+                  {criteriaMax[key]}점
+                </span>
+              </div>
+              <ul className="space-y-1.5">
+                {(CRITERIA_DESCRIPTIONS[key] ?? []).map((desc, i) => (
+                  <li key={i} className="flex gap-2 text-xs text-gray-500 leading-relaxed">
+                    <span className="shrink-0 font-semibold text-gray-300">{i + 1}.</span>
+                    <span>{desc}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* 평가 결과 */}
       <Card title="평가 결과">
-        {!team ? (
+        {loading ? (
+          <p className="text-sm text-gray-400 text-center py-10">불러오는 중...</p>
+        ) : !team ? (
           <p className="text-sm text-gray-400 text-center py-10">아직 지정된 팀이 없습니다.</p>
         ) : !settings.scoresPublished ? (
           <div className="flex items-center gap-3 p-4 rounded-xl bg-gray-50 border border-gray-200">
