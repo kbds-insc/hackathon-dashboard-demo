@@ -5,11 +5,17 @@ import type { Settings } from '../api/settings';
 
 let channelCounter = 0;
 
-export function useSettings(): Settings {
+export interface SettingsResult {
+  settings: Settings;
+  loaded: boolean;
+}
+
+export function useSettings(): SettingsResult {
   const [data, setData] = useState<Settings>(DEFAULT_SETTINGS);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    apiFetchSettings().then(setData).catch(console.error);
+    apiFetchSettings().then((s) => { setData(s); setLoaded(true); }).catch(console.error);
 
     const ch = supabase
       .channel(`hook-settings-${++channelCounter}`)
@@ -21,5 +27,5 @@ export function useSettings(): Settings {
     return () => { supabase.removeChannel(ch); };
   }, []);
 
-  return data;
+  return { settings: data, loaded };
 }

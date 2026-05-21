@@ -81,7 +81,7 @@ export default function ScoreInput() {
   const allTeams = useTeams();
   const teams = allTeams.filter((t) => t.submitStatus === 'submitted');
   const { user } = useAuth();
-  const settings = useSettings();
+  const { settings } = useSettings();
   const judgingOpen = isJudgingOpen(settings);
   const criteriaMax: Record<string, number> = {
     creativity: settings.creativityMax,

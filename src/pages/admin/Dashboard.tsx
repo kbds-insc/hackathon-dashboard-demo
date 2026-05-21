@@ -38,7 +38,7 @@ export default function Dashboard() {
   const teams = useTeams();
   const { data: participants } = useParticipants();
   const scores = useScores();
-  const settings = useSettings();
+  const { settings } = useSettings();
   const { data: notices } = useNotices();
   const { data: allMilestones } = useMilestones();
   const [submissionFiles, setSubmissionFiles] = useState<SubmissionFile[]>([]);

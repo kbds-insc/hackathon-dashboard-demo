@@ -29,7 +29,7 @@ export default function ParticipantDashboard() {
   const { data: notices } = useNotices();
   const { data: allMilestones } = useMilestones();
   const allScores = useScores();
-  const settings = useSettings();
+  const { settings } = useSettings();
 
   // 팀원 목록
   const teamMembers = team ? allParticipants.filter((p) => p.team === team.id) : [];
