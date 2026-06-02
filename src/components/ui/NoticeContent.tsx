@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
+import remarkGfm from 'remark-gfm';
 import { ExternalLink, X } from 'lucide-react';
 
 interface Props {
@@ -6,12 +9,11 @@ interface Props {
   className?: string;
 }
 
-const URL_PATTERN = /(https?:\/\/[^\s]+)/;
-
 export default function NoticeContent({ content, className }: Props) {
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
 
   const handleUrlClick = (url: string, e: React.MouseEvent) => {
+    e.preventDefault();
     e.stopPropagation();
     setPendingUrl(url);
   };
@@ -21,26 +23,42 @@ export default function NoticeContent({ content, className }: Props) {
     setPendingUrl(null);
   };
 
-  const parts = content.split(URL_PATTERN);
-
   return (
     <>
-      <p className={className}>
-        {parts.map((part, i) =>
-          /^https?:\/\//.test(part) ? (
-            <button
-              key={i}
-              type="button"
-              onClick={(e) => handleUrlClick(part, e)}
-              className="break-all text-left text-indigo-500 underline underline-offset-2 hover:text-indigo-700 transition-colors"
-            >
-              {part}
-            </button>
-          ) : (
-            <span key={i}>{part}</span>
-          )
-        )}
-      </p>
+      <div className={className}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm, remarkBreaks]}
+          components={{
+            a: ({ href, children }) => (
+              <button
+                type="button"
+                onClick={(e) => handleUrlClick(href ?? '', e)}
+                className="break-all text-left text-indigo-500 underline underline-offset-2 hover:text-indigo-700 transition-colors"
+              >
+                {children}
+              </button>
+            ),
+            h1: ({ children }) => <h1 className="text-lg font-bold text-gray-800 mt-2 mb-1">{children}</h1>,
+            h2: ({ children }) => <h2 className="text-base font-bold text-gray-700 mt-2 mb-1">{children}</h2>,
+            h3: ({ children }) => <h3 className="text-sm font-semibold text-gray-700 mt-1.5 mb-0.5">{children}</h3>,
+            strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+            em: ({ children }) => <em className="italic">{children}</em>,
+            ul: ({ children }) => <ul className="list-disc list-outside pl-4 space-y-0.5 my-1">{children}</ul>,
+            ol: ({ children }) => <ol className="list-decimal list-outside pl-4 space-y-0.5 my-1">{children}</ol>,
+            li: ({ children }) => <li>{children}</li>,
+            p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+            code: ({ children }) => (
+              <code className="bg-gray-100 rounded px-1 py-0.5 text-[11px] font-mono text-gray-700">{children}</code>
+            ),
+            blockquote: ({ children }) => (
+              <blockquote className="border-l-2 border-gray-300 pl-3 text-gray-500 italic my-1">{children}</blockquote>
+            ),
+            hr: () => <hr className="border-gray-200 my-2" />,
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+      </div>
 
       {/* ── URL 이동 확인 모달 ── */}
       {pendingUrl && (
