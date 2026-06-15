@@ -309,7 +309,7 @@ Deno.serve(async (req: Request) => {
       for (const file of files as Array<{ s3_key: string; file_name: string; team_id: string }>) {
         const teamName = (teamNameMap[file.team_id] ?? "unknown")
           .replace(/[/\\:*?"<>|]/g, "_");
-        const zipPath = `${teamName}/${file.file_name}`;
+        const zipPath = `${teamName}_${file.file_name}`;
 
         const s3Res = await s3.send(
           new GetObjectCommand({ Bucket: AWS_S3_BUCKET, Key: file.s3_key }),
