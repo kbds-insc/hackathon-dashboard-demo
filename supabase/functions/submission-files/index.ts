@@ -6,6 +6,7 @@ import {
   S3Client,
 } from "npm:@aws-sdk/client-s3";
 import { getSignedUrl } from "npm:@aws-sdk/s3-request-presigner";
+import { Zip, ZipPassThrough } from "npm:fflate";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "https://your-domain.com", // prd 도메인으로 변경
@@ -268,6 +269,70 @@ Deno.serve(async (req: Request) => {
     if (dbError) return json({ error: dbError.message }, 400);
 
     return json({ success: true });
+  }
+
+  // ── ZIP 전체 다운로드 (admin 전용) ──────────────────────────────────
+  if (action === "download-zip") {
+    if (!isAdmin) return json({ error: "Forbidden" }, 403);
+
+    const { file_type } = body;
+    if (!["final", "interim"].includes(file_type as string)) {
+      return json({ error: "file_type은 'final' 또는 'interim'이어야 합니다." }, 400);
+    }
+
+    const { data: files, error: filesError } = await admin
+      .from("submission_files")
+      .select("s3_key, file_name, team_id")
+      .eq("file_type", file_type as string)
+      .order("uploaded_at", { ascending: true });
+
+    if (filesError) return json({ error: filesError.message }, 500);
+    if (!files || files.length === 0) {
+      return json({ error: "다운로드할 파일이 없습니다." }, 404);
+    }
+
+    const { data: teams } = await admin.from("teams").select("id, name");
+    const teamNameMap: Record<string, string> = Object.fromEntries(
+      (teams ?? []).map((t: { id: string; name: string }) => [t.id, t.name]),
+    );
+
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    const writer = writable.getWriter();
+
+    const zip = new Zip((err: Error | null, dat: Uint8Array, final: boolean) => {
+      if (err) { writer.abort(err); return; }
+      writer.write(dat);
+      if (final) writer.close();
+    });
+
+    (async () => {
+      for (const file of files as Array<{ s3_key: string; file_name: string; team_id: string }>) {
+        const teamName = (teamNameMap[file.team_id] ?? "unknown")
+          .replace(/[/\\:*?"<>|]/g, "_");
+        const zipPath = `${teamName}/${file.file_name}`;
+
+        const s3Res = await s3.send(
+          new GetObjectCommand({ Bucket: AWS_S3_BUCKET, Key: file.s3_key }),
+        );
+        const fileData = await (s3Res.Body as { transformToByteArray: () => Promise<Uint8Array> })
+          .transformToByteArray();
+
+        const entry = new ZipPassThrough(zipPath);
+        zip.add(entry);
+        entry.push(fileData, true);
+      }
+      zip.end();
+    })().catch((e: Error) => writer.abort(e));
+
+    const label = file_type === "interim" ? "중간점검" : "최종제출";
+
+    return new Response(readable, {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(`submissions-${label}.zip`)}`,
+      },
+    });
   }
 
   return json({ error: "Unknown action" }, 400);

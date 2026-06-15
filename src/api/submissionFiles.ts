@@ -115,3 +115,33 @@ export async function apiDeleteSubmissionFile(fileId: string): Promise<void> {
 export async function apiDeleteSubmissionFileRecord(fileId: string): Promise<void> {
   await call('delete-record', { file_id: fileId });
 }
+
+export async function apiDownloadSubmissionZip(fileType: 'interim' | 'final'): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error('Unauthorized');
+
+  const res = await fetch(EDGE_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ action: 'download-zip', file_type: fileType }),
+  });
+
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(errJson.error ?? '다운로드에 실패했습니다.');
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `submissions-${fileType === 'interim' ? '중간점검' : '최종제출'}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
