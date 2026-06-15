@@ -9,7 +9,6 @@ export type InAppBrowser =
   | 'line'
   | 'instagram'
   | 'facebook'
-  | 'other'
   | null;
 
 export type MobileOS = 'ios' | 'android' | 'other';
@@ -23,8 +22,6 @@ export function detectInAppBrowser(): InAppBrowser {
   if (/Line\//i.test(ua)) return 'line';
   if (/Instagram/i.test(ua)) return 'instagram';
   if (/FBAN|FBAV/i.test(ua)) return 'facebook';
-  // Android WebView 일반 감지 (인앱 브라우저 공통 표식)
-  if (/; wv\)/i.test(ua)) return 'other';
 
   return null;
 }
