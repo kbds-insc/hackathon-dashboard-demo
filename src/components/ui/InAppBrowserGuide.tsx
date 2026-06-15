@@ -57,8 +57,8 @@ export default function InAppBrowserGuide({ open, onClose }: Props) {
 
         <p className="text-xs text-gray-500 leading-relaxed mb-4">
           현재 인앱 브라우저에서는 파일 다운로드가 제한됩니다.
-          모바일은 Chrome·Safari에서, PC는 복사한 링크를 브라우저에 붙여넣어
-          다시 시도해 주세요.
+          Chrome·Safari에서 열어 다시 시도하거나, 링크를 복사해
+          PC 브라우저에서 다운로드해 주세요.
         </p>
 
         {os === 'android' ? (
