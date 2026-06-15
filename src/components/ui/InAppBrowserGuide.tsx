@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ExternalLink, X, Copy, Check } from 'lucide-react';
-import { detectInAppBrowser, getMobileOS } from '../../utils/inAppBrowser';
+import { getMobileOS } from '../../utils/inAppBrowser';
 
 interface Props {
   open: boolean;
@@ -12,18 +12,15 @@ export default function InAppBrowserGuide({ open, onClose }: Props) {
   if (!open) return null;
 
   const os = getMobileOS();
-  const inApp = detectInAppBrowser();
 
   const handleOpenExternal = () => {
     const url = window.location.href;
-    if (inApp === 'kakaotalk') {
-      // 카카오톡 전용: 외부 브라우저 강제 실행
-      window.location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(url)}`;
-      return;
-    }
-    // 일반 Android WebView: Chrome intent로 실행
+    // 기본 브라우저가 또 다른 인앱(네이버 앱 등)일 수 있으므로,
+    // Android에서는 Chrome을 명시적으로 강제 실행해 루프를 방지한다.
     const cleaned = url.replace(/^https?:\/\//, '');
-    window.location.href = `intent://${cleaned}#Intent;scheme=https;package=com.android.chrome;end`;
+    window.location.href =
+      `intent://${cleaned}#Intent;scheme=https;package=com.android.chrome;` +
+      `S.browser_fallback_url=${encodeURIComponent(url)};end`;
   };
 
   const handleCopy = async () => {
@@ -68,7 +65,7 @@ export default function InAppBrowserGuide({ open, onClose }: Props) {
             onClick={handleOpenExternal}
             className="w-full py-2.5 mb-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
           >
-            {inApp === 'kakaotalk' ? '외부 브라우저로 열기' : 'Chrome으로 열기'}
+            Chrome으로 열기
           </button>
         ) : (
           <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 mb-3 text-xs text-gray-600 leading-relaxed">
