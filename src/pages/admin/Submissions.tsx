@@ -11,6 +11,8 @@ import {
   apiDownloadSubmissionZip,
 } from '../../api/submissionFiles';
 import type { SubmissionFile } from '../../api/submissionFiles';
+import InAppBrowserGuide from '../../components/ui/InAppBrowserGuide';
+import { detectInAppBrowser } from '../../utils/inAppBrowser';
 import { FileCheck, ExternalLink, Clock, AlertCircle, FileText, Download, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 
 function getSafeHttpsHref(value: string): string | null {
@@ -34,6 +36,7 @@ export default function Submissions() {
   const [submissionFiles, setSubmissionFiles] = useState<SubmissionFile[]>([]);
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
   const [zipDownloading, setZipDownloading] = useState<'interim' | 'final' | null>(null);
+  const [showInAppGuide, setShowInAppGuide] = useState(false);
   const [expandedDesc, setExpandedDesc] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -54,6 +57,11 @@ export default function Submissions() {
   const total = teams.length;
 
   const handleDownloadZip = async (fileType: 'interim' | 'final') => {
+    // 인앱 브라우저(카톡 등)는 blob 다운로드가 차단되므로 안내 모달 표시
+    if (detectInAppBrowser()) {
+      setShowInAppGuide(true);
+      return;
+    }
     setZipDownloading(fileType);
     try {
       await apiDownloadSubmissionZip(fileType);
@@ -326,6 +334,8 @@ export default function Submissions() {
           );
         })}
       </div>
+
+      <InAppBrowserGuide open={showInAppGuide} onClose={() => setShowInAppGuide(false)} />
     </AdminLayout>
   );
 }
