@@ -8,6 +8,7 @@ import type { Submission } from '../../api/submissions';
 import {
   apiFetchAllSubmissionFiles,
   apiGetSubmissionDownloadUrl,
+  apiDownloadSubmissionZip,
 } from '../../api/submissionFiles';
 import type { SubmissionFile } from '../../api/submissionFiles';
 import { FileCheck, ExternalLink, Clock, AlertCircle, FileText, Download, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
@@ -32,6 +33,7 @@ export default function Submissions() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [submissionFiles, setSubmissionFiles] = useState<SubmissionFile[]>([]);
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
+  const [zipDownloading, setZipDownloading] = useState<'interim' | 'final' | null>(null);
   const [expandedDesc, setExpandedDesc] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -51,6 +53,17 @@ export default function Submissions() {
   const interimCount = teams.filter((t) => interimFileMap[t.id] !== undefined).length;
   const total = teams.length;
 
+  const handleDownloadZip = async (fileType: 'interim' | 'final') => {
+    setZipDownloading(fileType);
+    try {
+      await apiDownloadSubmissionZip(fileType);
+    } catch {
+      console.error('ZIP 다운로드 실패');
+    } finally {
+      setZipDownloading(null);
+    }
+  };
+
   const handleDownload = async (fileId: string) => {
     setDownloadingFileId(fileId);
     try {
@@ -68,49 +81,87 @@ export default function Submissions() {
       {/* 요약 배너: 중간/최종 분리 */}
       <div className="grid grid-cols-2 gap-4 mb-6">
         {/* 중간 점검 */}
-        <div className={`flex items-center gap-3 sm:gap-4 rounded-xl border px-4 sm:px-5 py-4 ${
+        <div className={`rounded-xl border px-4 sm:px-5 py-4 ${
           interimCount === total && total > 0 ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-200'
         }`}>
-          <FileText className={`w-8 h-8 shrink-0 ${interimCount === total && total > 0 ? 'text-blue-500' : 'text-gray-400'}`} />
-          <div className="min-w-0">
-            <p className={`font-semibold text-sm sm:text-base truncate ${interimCount === total && total > 0 ? 'text-blue-800' : 'text-gray-700'}`}>
-              중간 점검 {interimCount}/{total}팀
-            </p>
-            <p className={`text-xs mt-0.5 ${interimCount === total && total > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
-              {interimCount === total && total > 0
-                ? '모든 팀이 업로드했습니다.'
-                : `${total - interimCount}팀 미업로드`}
-            </p>
+          <div className="flex items-center gap-3 sm:gap-4">
+            <FileText className={`w-8 h-8 shrink-0 ${interimCount === total && total > 0 ? 'text-blue-500' : 'text-gray-400'}`} />
+            <div className="min-w-0 flex-1">
+              <p className={`font-semibold text-sm sm:text-base truncate ${interimCount === total && total > 0 ? 'text-blue-800' : 'text-gray-700'}`}>
+                중간 점검 {interimCount}/{total}팀
+              </p>
+              <p className={`text-xs mt-0.5 ${interimCount === total && total > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                {interimCount === total && total > 0
+                  ? '모든 팀이 업로드했습니다.'
+                  : `${total - interimCount}팀 미업로드`}
+              </p>
+            </div>
+            <div className="hidden sm:block text-right shrink-0">
+              <p className={`text-xl font-bold ${interimCount === total && total > 0 ? 'text-blue-600' : 'text-gray-500'}`}>
+                {total > 0 ? Math.round((interimCount / total) * 100) : 0}%
+              </p>
+              <p className="text-xs text-gray-400">업로드율</p>
+            </div>
           </div>
-          <div className="ml-auto hidden sm:block text-right shrink-0">
-            <p className={`text-xl font-bold ${interimCount === total && total > 0 ? 'text-blue-600' : 'text-gray-500'}`}>
-              {total > 0 ? Math.round((interimCount / total) * 100) : 0}%
-            </p>
-            <p className="text-xs text-gray-400">업로드율</p>
-          </div>
+          {interimCount > 0 && (
+            <div className={`mt-3 pt-2 border-t ${interimCount === total && total > 0 ? 'border-blue-100' : 'border-gray-200'}`}>
+              <button
+                onClick={() => handleDownloadZip('interim')}
+                disabled={zipDownloading !== null}
+                className={`flex items-center gap-1.5 text-xs font-medium disabled:opacity-50 transition-colors ${
+                  interimCount === total && total > 0 ? 'text-blue-600 hover:text-blue-700' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {zipDownloading === 'interim' ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" />ZIP 생성 중...</>
+                ) : (
+                  <><Download className="w-3.5 h-3.5" />전체 다운로드</>
+                )}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* 최종 제출 */}
-        <div className={`flex items-center gap-3 sm:gap-4 rounded-xl border px-4 sm:px-5 py-4 ${
+        <div className={`rounded-xl border px-4 sm:px-5 py-4 ${
           submittedCount === total && total > 0 ? 'bg-green-50 border-green-100' : 'bg-indigo-50 border-indigo-100'
         }`}>
-          <FileCheck className={`w-8 h-8 shrink-0 ${submittedCount === total && total > 0 ? 'text-green-500' : 'text-indigo-500'}`} />
-          <div className="min-w-0">
-            <p className={`font-semibold text-sm sm:text-base truncate ${submittedCount === total && total > 0 ? 'text-green-800' : 'text-indigo-800'}`}>
-              최종 제출 {submittedCount}/{total}팀
-            </p>
-            <p className={`text-xs mt-0.5 ${submittedCount === total && total > 0 ? 'text-green-600' : 'text-indigo-500'}`}>
-              {submittedCount === total && total > 0
-                ? '모든 팀이 제출을 완료했습니다.'
-                : `${total - submittedCount}팀 미제출`}
-            </p>
+          <div className="flex items-center gap-3 sm:gap-4">
+            <FileCheck className={`w-8 h-8 shrink-0 ${submittedCount === total && total > 0 ? 'text-green-500' : 'text-indigo-500'}`} />
+            <div className="min-w-0 flex-1">
+              <p className={`font-semibold text-sm sm:text-base truncate ${submittedCount === total && total > 0 ? 'text-green-800' : 'text-indigo-800'}`}>
+                최종 제출 {submittedCount}/{total}팀
+              </p>
+              <p className={`text-xs mt-0.5 ${submittedCount === total && total > 0 ? 'text-green-600' : 'text-indigo-500'}`}>
+                {submittedCount === total && total > 0
+                  ? '모든 팀이 제출을 완료했습니다.'
+                  : `${total - submittedCount}팀 미제출`}
+              </p>
+            </div>
+            <div className="hidden sm:block text-right shrink-0">
+              <p className={`text-xl font-bold ${submittedCount === total && total > 0 ? 'text-green-600' : 'text-indigo-600'}`}>
+                {total > 0 ? Math.round((submittedCount / total) * 100) : 0}%
+              </p>
+              <p className="text-xs text-gray-400">완료율</p>
+            </div>
           </div>
-          <div className="ml-auto hidden sm:block text-right shrink-0">
-            <p className={`text-xl font-bold ${submittedCount === total && total > 0 ? 'text-green-600' : 'text-indigo-600'}`}>
-              {total > 0 ? Math.round((submittedCount / total) * 100) : 0}%
-            </p>
-            <p className="text-xs text-gray-400">완료율</p>
-          </div>
+          {Object.keys(finalFileMap).length > 0 && (
+            <div className={`mt-3 pt-2 border-t ${submittedCount === total && total > 0 ? 'border-green-100' : 'border-indigo-100'}`}>
+              <button
+                onClick={() => handleDownloadZip('final')}
+                disabled={zipDownloading !== null}
+                className={`flex items-center gap-1.5 text-xs font-medium disabled:opacity-50 transition-colors ${
+                  submittedCount === total && total > 0 ? 'text-green-600 hover:text-green-700' : 'text-indigo-600 hover:text-indigo-700'
+                }`}
+              >
+                {zipDownloading === 'final' ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" />ZIP 생성 중...</>
+                ) : (
+                  <><Download className="w-3.5 h-3.5" />전체 다운로드</>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
