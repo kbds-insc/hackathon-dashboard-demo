@@ -472,7 +472,7 @@ export default function Submit() {
   const handleSubmit = async () => {
     if (!isFormValid || !team?.id) return;
 
-    const nextGithubError = getUrlError(github, 'GitHub URL');
+    const nextGithubError = github.trim() ? getUrlError(github, 'GitHub URL') : null;
     setGithubError(nextGithubError);
     let nextSlidesError: string | null = null;
     if (slidesMode === 'url') {
@@ -770,7 +770,7 @@ export default function Submit() {
                     onChange={(e) => {
                       const value = e.target.value;
                       setGithub(value);
-                      setGithubError(getUrlError(value, 'GitHub URL'));
+                      setGithubError(value.trim() ? getUrlError(value, 'GitHub URL') : null);
                     }}
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#80766b]/30 placeholder-gray-300"
                   />
