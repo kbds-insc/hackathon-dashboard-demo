@@ -732,7 +732,8 @@ export default function Submit() {
             onChange={handleFileSelect}
             className="hidden"
           />
-          {fileError && <p className="mt-1 text-xs text-red-600">{fileError}</p>}
+          <p className="mt-1 text-[10px] text-gray-400">파일 첨부 시 최대 20MB까지 가능합니다.</p>
+          {fileError && <p className="mt-0.5 text-xs text-red-600">{fileError}</p>}
         </div>
       )}
     </div>
