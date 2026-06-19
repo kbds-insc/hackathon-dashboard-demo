@@ -80,7 +80,9 @@ export async function apiUpsertSubmission(
   teamId: string,
   payload: { githubUrl: string; slidesUrl: string; description: string }
 ): Promise<void> {
-  const githubUrl = normalizeHttpsUrl(payload.githubUrl, 'GitHub URL');
+  const githubUrl = payload.githubUrl.trim()
+    ? normalizeHttpsUrl(payload.githubUrl, 'GitHub URL')
+    : '';
   const slidesUrl = payload.slidesUrl.trim()
     ? normalizeHttpsUrl(payload.slidesUrl, 'Slides URL')
     : '';
