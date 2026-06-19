@@ -759,9 +759,10 @@ export default function Submit() {
             </div>
             <Card title="최종 결과물 수정">
               <div className="space-y-4">
+                {slidesFieldEditing}
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                    GitHub URL
+                    GitHub URL <span className="text-gray-400 font-normal">(선택)</span>
                   </label>
                   <input
                     type="url"
@@ -776,7 +777,6 @@ export default function Submit() {
                   />
                   {githubError && <p className="mt-1 text-xs text-red-600">{githubError}</p>}
                 </div>
-                {slidesFieldEditing}
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">
                     프로젝트 설명 <span className="text-red-400">*</span>
@@ -855,9 +855,10 @@ export default function Submit() {
           {/* 제출 폼 */}
           <Card title="최종 결과물 제출">
             <div className="space-y-4">
+              {slidesFieldEditing}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                  GitHub URL <span className="text-red-400">*</span>
+                  GitHub URL <span className="text-gray-400 font-normal">(선택)</span>
                 </label>
                 <input
                   type="url"
@@ -866,13 +867,12 @@ export default function Submit() {
                   onChange={(e) => {
                     const value = e.target.value;
                     setGithub(value);
-                    setGithubError(getUrlError(value, 'GitHub URL'));
+                    setGithubError(value.trim() ? getUrlError(value, 'GitHub URL') : null);
                   }}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#80766b]/30 placeholder-gray-300"
                 />
                 {githubError && <p className="mt-1 text-xs text-red-600">{githubError}</p>}
               </div>
-              {slidesFieldEditing}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">
                   프로젝트 설명 <span className="text-red-400">*</span>
