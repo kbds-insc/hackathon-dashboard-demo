@@ -30,7 +30,7 @@ const ALLOWED_MIME_TYPES = new Set([
   "application/zip",
 ]);
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -128,7 +128,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if ((file_size as number) > MAX_FILE_SIZE) {
-      return json({ error: "파일 크기는 20MB를 초과할 수 없습니다." }, 400);
+      return json({ error: "파일 크기는 200MB를 초과할 수 없습니다." }, 400);
     }
     if (!ALLOWED_MIME_TYPES.has(mime_type as string)) {
       return json({ error: "허용되지 않는 파일 형식입니다." }, 400);
@@ -153,7 +153,7 @@ Deno.serve(async (req: Request) => {
       Key: s3Key,
       ContentType: mime_type as string,
     });
-    const uploadUrl = await getSignedUrl(s3, putCommand, { expiresIn: 300 });
+    const uploadUrl = await getSignedUrl(s3, putCommand, { expiresIn: 600 });
 
     const { data: fileRecord, error: dbError } = await admin
       .from("submission_files")

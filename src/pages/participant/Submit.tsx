@@ -37,7 +37,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 }
 
-const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_FILE_BYTES = 200 * 1024 * 1024;
 const ACCEPTED_MIME_TYPES = [
   'application/pdf',
   'application/msword',
@@ -273,7 +273,7 @@ function InterimCard({
           className="w-full flex flex-col items-center gap-1.5 px-3 py-4 border border-dashed border-gray-300 rounded-lg hover:border-[#80766b]/50 hover:bg-gray-50 transition-colors"
         >
           <Paperclip className="w-4 h-4 text-gray-400" />
-          <span className="text-xs text-gray-500">파일 선택 (최대 20MB)</span>
+          <span className="text-xs text-gray-500">파일 선택 (최대 200MB)</span>
           <span className="text-[10px] text-gray-400">PDF, PPT, PPTX, DOCX, ZIP 등</span>
         </button>
       ) : (
@@ -391,7 +391,7 @@ export default function Submit() {
     setFileError(null);
     if (!file) { setSelectedFile(null); return; }
     if (file.size > MAX_FILE_BYTES) {
-      setFileError('파일 크기는 20MB를 초과할 수 없습니다.');
+      setFileError('파일 크기는 200MB를 초과할 수 없습니다.');
       setSelectedFile(null);
       e.target.value = '';
       return;
@@ -410,7 +410,7 @@ export default function Submit() {
     setInterimFileError(null);
     if (!file) { setInterimSelectedFile(null); return; }
     if (file.size > MAX_FILE_BYTES) {
-      setInterimFileError('파일 크기는 20MB를 초과할 수 없습니다.');
+      setInterimFileError('파일 크기는 200MB를 초과할 수 없습니다.');
       setInterimSelectedFile(null);
       e.target.value = '';
       return;
@@ -721,7 +721,7 @@ export default function Submit() {
               className="w-full flex flex-col items-center gap-1.5 px-3 py-4 border border-dashed border-gray-300 rounded-lg hover:border-[#80766b]/50 hover:bg-gray-50 transition-colors"
             >
               <Paperclip className="w-4 h-4 text-gray-400" />
-              <span className="text-xs text-gray-500">파일 선택 (최대 20MB)</span>
+              <span className="text-xs text-gray-500">파일 선택 (최대 200MB)</span>
               <span className="text-[10px] text-gray-400">PDF, PPT, PPTX, DOCX, ZIP 등</span>
             </button>
           )}
