@@ -370,7 +370,7 @@ export default function Submit() {
 
   const submitted = submission !== null;
   const slidesProvided = slidesMode === 'url' ? slides.trim() !== '' : (selectedFile !== null || slidesFile !== null);
-  const isFormValid = github.trim() && description.trim() && slidesProvided;
+  const isFormValid = description.trim() && slidesProvided;
 
   const handleCancelEdit = () => {
     if (submission) {
@@ -761,7 +761,7 @@ export default function Submit() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                    GitHub URL <span className="text-red-400">*</span>
+                    GitHub URL
                   </label>
                   <input
                     type="url"
