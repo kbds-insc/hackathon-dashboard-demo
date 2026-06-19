@@ -120,22 +120,6 @@ function SubmissionReadOnly({
     <Card title="제출 내역" className="mb-5">
       <div className="space-y-4">
         <div>
-          <p className="text-xs text-gray-400 mb-1">GitHub 저장소</p>
-          {githubHref ? (
-            <a
-              href={githubHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-sm text-[#80766b] hover:underline break-all"
-            >
-              {submission.githubUrl}
-              <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-            </a>
-          ) : (
-            <p className="text-sm text-red-600 break-all">{submission.githubUrl}</p>
-          )}
-        </div>
-        <div>
           <p className="text-xs text-gray-400 mb-1">발표 자료</p>
           {slidesFile ? (
             <SlidesFileRow
@@ -153,6 +137,24 @@ function SubmissionReadOnly({
               {submission.slidesUrl}
               <ExternalLink className="w-3.5 h-3.5 shrink-0" />
             </a>
+          ) : (
+            <p className="text-sm text-gray-400">없음</p>
+          )}
+        </div>
+        <div>
+          <p className="text-xs text-gray-400 mb-1">GitHub 저장소</p>
+          {githubHref ? (
+            <a
+              href={githubHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-sm text-[#80766b] hover:underline break-all"
+            >
+              {submission.githubUrl}
+              <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+            </a>
+          ) : submission.githubUrl ? (
+            <p className="text-sm text-red-600 break-all">{submission.githubUrl}</p>
           ) : (
             <p className="text-sm text-gray-400">없음</p>
           )}
