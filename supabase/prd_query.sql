@@ -20,7 +20,9 @@ CREATE TABLE teams (
 CREATE TABLE participants (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name        text NOT NULL,
-  email       text NOT NULL UNIQUE,
+  employee_id text NOT NULL UNIQUE
+              CONSTRAINT chk_employee_id
+              CHECK (employee_id ~ '^[A-Z][0-9]{6}$'),
   team_id     uuid REFERENCES teams(id) ON DELETE SET NULL,
   status      text NOT NULL DEFAULT 'pending'
               CONSTRAINT chk_status
@@ -283,3 +285,31 @@ CREATE POLICY "leader_update" ON submissions
       WHERE user_id = auth.uid() AND is_leader = true
     )
   );
+
+-- ============================================================
+-- MIGRATION: email → employee_id (사번 로그인)
+-- ============================================================
+
+-- 기존 DB에 email 컬럼이 있는 경우 실행:
+-- 1. employee_id 컬럼 추가
+ALTER TABLE participants
+  ADD COLUMN IF NOT EXISTS employee_id text UNIQUE
+  CONSTRAINT chk_employee_id CHECK (employee_id ~ '^[A-Z][0-9]{6}$');
+
+-- 2. auth.users email을 기반으로 employee_id 채우기 (도메인 = @hackathon.internal)
+--    신규 생성된 사용자는 이미 올바른 형식의 fake email을 가짐
+UPDATE participants p
+SET employee_id = upper(split_part(u.email, '@', 1))
+FROM auth.users u
+WHERE p.user_id = u.id
+  AND u.email LIKE '%@hackathon.internal'
+  AND p.employee_id IS NULL;
+
+-- 3. employee_id가 NULL인 레거시 행은 수동으로 채워야 함
+--    (직접 employee_id = 'DXXXXXX' 형태로 UPDATE)
+
+-- 4. NOT NULL 제약 추가 (NULL 행이 없음을 확인한 후)
+-- ALTER TABLE participants ALTER COLUMN employee_id SET NOT NULL;
+
+-- 5. email 컬럼 제거 (데이터 마이그레이션 완료 후)
+-- ALTER TABLE participants DROP COLUMN IF EXISTS email;
