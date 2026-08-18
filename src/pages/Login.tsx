@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/useAuth';
+import { EMPLOYEE_ID_REGEX, toFakeEmail } from '../api/participants';
 import { Trophy, Eye, EyeOff } from 'lucide-react';
 
 export default function Login() {
   const { signIn, user } = useAuth();
 
-  const [email, setEmail] = useState('');
+  const [employeeId, setEmployeeId] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,17 +26,21 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setLoading(true);
 
-    const { error: err } = await signIn(email, password);
+    const trimmed = employeeId.trim();
+    if (!EMPLOYEE_ID_REGEX.test(trimmed)) {
+      setError('아이디 형식이 올바르지 않습니다. (알파벳 1자 + 숫자 6자리)');
+      return;
+    }
+
+    setLoading(true);
+    const { error: err } = await signIn(toFakeEmail(trimmed), password);
     if (err) {
-      setError('이메일 또는 비밀번호가 올바르지 않습니다.');
+      setError('아이디 또는 비밀번호가 올바르지 않습니다.');
       setLoading(false);
       return;
     }
 
-    // onAuthStateChange가 user를 업데이트하면 위의 redirect가 동작함
-    // 만약 race condition이 생기면 수동으로 navigate
     setLoading(false);
   };
 
@@ -54,18 +59,18 @@ export default function Login() {
         {/* 카드 */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* 이메일 */}
+            {/* 아이디 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                이메일
+                아이디
               </label>
               <input
-                type="email"
+                type="text"
                 required
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="example@email.com"
+                autoComplete="username"
+                value={employeeId}
+                onChange={(e) => setEmployeeId(e.target.value)}
+                placeholder="D사번"
                 className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#80766b]/30 focus:border-[#80766b] transition-colors"
               />
             </div>
