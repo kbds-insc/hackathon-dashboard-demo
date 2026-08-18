@@ -13,7 +13,7 @@ interface DBAttendanceRow {
   updated_at: string;
   participants: {
     name: string;
-    email: string;
+    employee_id: string;
     department: string;
     position: string;
     is_leader: boolean;
@@ -28,7 +28,7 @@ export interface MilestoneAttendance {
   attending: boolean;
   updatedAt: string;
   participantName: string;
-  participantEmail: string;
+  participantEmployeeId: string;
   participantDepartment: string;
   participantPosition: string;
   isLeader: boolean;
@@ -85,7 +85,7 @@ export async function apiFetchMilestoneAttendances(milestoneId: string): Promise
       updated_at,
       participants (
         name,
-        email,
+        employee_id,
         department,
         position,
         is_leader,
@@ -103,7 +103,7 @@ export async function apiFetchMilestoneAttendances(milestoneId: string): Promise
       attending: row.attending,
       updatedAt: row.updated_at,
       participantName: row.participants?.name ?? '',
-      participantEmail: row.participants?.email ?? '',
+      participantEmployeeId: row.participants?.employee_id ?? '',
       participantDepartment: row.participants?.department ?? '',
       participantPosition: row.participants?.position ?? '',
       isLeader: row.participants?.is_leader ?? false,
