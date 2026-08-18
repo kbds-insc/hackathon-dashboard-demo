@@ -3,7 +3,7 @@
 export interface Participant {
   id: string;
   name: string;
-  email: string;
+  employeeId: string;
   team: string;
   status: 'approved' | 'pending' | 'rejected';
   department: string;
@@ -57,27 +57,27 @@ export interface Score {
 
 export const participants: Participant[] = [
   // Team Alpha (4명)
-  { id: 'p01', name: '김민준', email: 'minjun.kim@example.com', team: 't1', status: 'approved', department: '개발팀', position: '대리' },
-  { id: 'p02', name: '이서연', email: 'seoyeon.lee@example.com', team: 't1', status: 'approved', department: '디자인팀', position: '주임' },
-  { id: 'p03', name: '박지호', email: 'jiho.park@example.com', team: 't1', status: 'approved', department: '개발팀', position: '사원' },
-  { id: 'p04', name: '최수아', email: 'sua.choi@example.com', team: 't1', status: 'pending', department: '기획팀', position: '대리' },
+  { id: 'p01', name: '김민준', employeeId: 'D100001', team: 't1', status: 'approved', department: '개발팀', position: '대리' },
+  { id: 'p02', name: '이서연', employeeId: 'D100002', team: 't1', status: 'approved', department: '디자인팀', position: '주임' },
+  { id: 'p03', name: '박지호', employeeId: 'D100003', team: 't1', status: 'approved', department: '개발팀', position: '사원' },
+  { id: 'p04', name: '최수아', employeeId: 'D100004', team: 't1', status: 'pending', department: '기획팀', position: '대리' },
 
   // Team Beta (4명)
-  { id: 'p05', name: '정우진', email: 'woojin.jung@example.com', team: 't2', status: 'approved', department: '개발팀', position: '과장' },
-  { id: 'p06', name: '강예린', email: 'yerin.kang@example.com', team: 't2', status: 'approved', department: '마케팅팀', position: '대리' },
-  { id: 'p07', name: '윤도현', email: 'dohyeon.yoon@example.com', team: 't2', status: 'approved', department: '개발팀', position: '주임' },
-  { id: 'p08', name: '임하은', email: 'haeun.lim@example.com', team: 't2', status: 'rejected', department: '디자인팀', position: '사원' },
+  { id: 'p05', name: '정우진', employeeId: 'D100005', team: 't2', status: 'approved', department: '개발팀', position: '과장' },
+  { id: 'p06', name: '강예린', employeeId: 'D100006', team: 't2', status: 'approved', department: '마케팅팀', position: '대리' },
+  { id: 'p07', name: '윤도현', employeeId: 'D100007', team: 't2', status: 'approved', department: '개발팀', position: '주임' },
+  { id: 'p08', name: '임하은', employeeId: 'D100008', team: 't2', status: 'rejected', department: '디자인팀', position: '사원' },
 
   // Team Gamma (3명)
-  { id: 'p09', name: '오승민', email: 'seungmin.oh@example.com', team: 't3', status: 'approved', department: '데이터분석팀', position: '대리' },
-  { id: 'p10', name: '한지원', email: 'jiwon.han@example.com', team: 't3', status: 'approved', department: '개발팀', position: '주임' },
-  { id: 'p11', name: '신유나', email: 'yuna.shin@example.com', team: 't3', status: 'pending', department: '기획팀', position: '사원' },
+  { id: 'p09', name: '오승민', employeeId: 'D100009', team: 't3', status: 'approved', department: '데이터분석팀', position: '대리' },
+  { id: 'p10', name: '한지원', employeeId: 'D100010', team: 't3', status: 'approved', department: '개발팀', position: '주임' },
+  { id: 'p11', name: '신유나', employeeId: 'D100011', team: 't3', status: 'pending', department: '기획팀', position: '사원' },
 
   // Team Delta (4명)
-  { id: 'p12', name: '배태양', email: 'taeyang.bae@example.com', team: 't4', status: 'approved', department: '개발팀', position: '과장' },
-  { id: 'p13', name: '류채원', email: 'chaewon.ryu@example.com', team: 't4', status: 'approved', department: 'UX팀', position: '대리' },
-  { id: 'p14', name: '문성호', email: 'seongho.moon@example.com', team: 't4', status: 'approved', department: '개발팀', position: '주임' },
-  { id: 'p15', name: '노아름', email: 'areum.noh@example.com', team: 't4', status: 'pending', department: '기획팀', position: '사원' },
+  { id: 'p12', name: '배태양', employeeId: 'D100012', team: 't4', status: 'approved', department: '개발팀', position: '과장' },
+  { id: 'p13', name: '류채원', employeeId: 'D100013', team: 't4', status: 'approved', department: 'UX팀', position: '대리' },
+  { id: 'p14', name: '문성호', employeeId: 'D100014', team: 't4', status: 'approved', department: '개발팀', position: '주임' },
+  { id: 'p15', name: '노아름', employeeId: 'D100015', team: 't4', status: 'pending', department: '기획팀', position: '사원' },
 ];
 
 // ─── 팀 (4개) ────────────────────────────────────────────────
