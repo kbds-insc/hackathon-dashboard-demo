@@ -7,6 +7,7 @@ const corsHeaders = {
 
 const MAX_TEAM_MEMBERS = 5;
 const TEAM_MEMBER_LIMIT_MESSAGE = `팀은 최대 ${MAX_TEAM_MEMBERS}명까지 구성할 수 있습니다.`;
+const EMPLOYEE_ID_REGEX = /^[A-Za-z]\d{6}$/;
 
 async function isTeamFull(
   admin: ReturnType<typeof createClient>,
@@ -99,18 +100,25 @@ Deno.serve(async (req: Request) => {
 
   // ── 참가자 생성 ────────────────────────────────────────────────
   if (action === "create") {
-    const { name, email, password, department, position, team_id, status, is_leader } = body;
+    const { name, employee_id, password, department, position, team_id, status, is_leader } = body;
 
-    if (!email || !name) return json({ error: "email, name은 필수입니다." }, 400);
+    if (!employee_id || !name) return json({ error: "employee_id, name은 필수입니다." }, 400);
 
-    // 이메일 중복 사전 체크
-    const { data: existingByEmail } = await admin
+    const rawId = String(employee_id).trim();
+    if (!EMPLOYEE_ID_REGEX.test(rawId)) {
+      return json({ error: "사번 형식이 올바르지 않습니다. (알파벳 1자 + 숫자 6자리)" }, 400);
+    }
+    const normalizedEmployeeId = rawId.toUpperCase();
+    const fakeEmail = `${normalizedEmployeeId}@hackathon.internal`;
+
+    // 사번 중복 사전 체크
+    const { data: existingByEmployeeId } = await admin
       .from("participants")
       .select("id")
-      .eq("email", email as string)
+      .eq("employee_id", normalizedEmployeeId)
       .maybeSingle();
-    if (existingByEmail) {
-      return json({ error: "이미 등록된 이메일입니다." }, 409);
+    if (existingByEmployeeId) {
+      return json({ error: "이미 등록된 사번입니다." }, 409);
     }
 
     let resolvedTeamId = (team_id as string | undefined) || null;
@@ -159,7 +167,7 @@ Deno.serve(async (req: Request) => {
 
     // 1. auth user 생성
     const { data: authData, error: authError } = await admin.auth.admin.createUser({
-      email: email as string,
+      email: fakeEmail,
       password: resolvedPassword,
       email_confirm: true,
       app_metadata: { role: "participant" },       // 서버 전용 — 클라이언트 수정 불가
@@ -173,7 +181,7 @@ Deno.serve(async (req: Request) => {
       .insert({
         user_id: authData.user.id,
         name,
-        email,
+        employee_id: normalizedEmployeeId,
         team_id: resolvedTeamId,
         department: department ?? "",
         position: position ?? "",
