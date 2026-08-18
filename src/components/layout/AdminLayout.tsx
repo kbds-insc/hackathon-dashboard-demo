@@ -259,7 +259,6 @@ function SidebarFooter({
       {user && (
         <div className="px-3 mb-2">
           <p className="text-xs font-medium text-gray-700 truncate">{user.name}</p>
-          <p className="text-xs text-gray-400 truncate">{user.email}</p>
         </div>
       )}
       <button
