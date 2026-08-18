@@ -1,6 +1,9 @@
 import { supabase } from '../lib/supabase';
 import type { Participant } from '../data/mockData';
 
+export const EMPLOYEE_ID_REGEX = /^[A-Za-z]\d{6}$/;
+export const toFakeEmail = (employeeId: string) => `${employeeId.toUpperCase()}@hackathon.internal`;
+
 // supabase.functions.invoke()의 기본 Authorization 헤더는 anon 키이므로
 // Edge Function 호출 시 세션 JWT를 명시적으로 전달해야 한다.
 // (Supabase 인프라의 verify_jwt 활성화 시 anon 키 → 401 반환)
@@ -27,7 +30,7 @@ interface DBParticipant {
   id: string;
   user_id: string | null;
   name: string;
-  email: string;
+  employee_id: string;
   team_id: string | null;
   department: string;
   position: string;
@@ -39,7 +42,7 @@ function fromDB(row: DBParticipant): Participant {
   return {
     id: row.id,
     name: row.name,
-    email: row.email,
+    employeeId: row.employee_id,
     team: row.team_id ?? '',
     department: row.department ?? '',
     position: row.position ?? '',
@@ -63,7 +66,7 @@ export async function apiAddParticipant(p: Omit<Participant, 'id'>): Promise<Par
     .from('participants')
     .insert({
       name: p.name,
-      email: p.email,
+      employee_id: p.employeeId,
       team_id: p.team || null,
       department: p.department,
       position: p.position,
@@ -83,7 +86,7 @@ export async function apiCreateParticipantWithAuth(
   const body: Record<string, unknown> = {
     action: 'create',
     name: p.name,
-    email: p.email,
+    employee_id: p.employeeId,
     department: p.department,
     position: p.position,
     team_id: p.team || null,
@@ -107,7 +110,7 @@ export async function apiUpdateParticipant(
 ): Promise<void> {
   const patch: Record<string, unknown> = {};
   if ('name' in partial) patch.name = partial.name;
-  if ('email' in partial) patch.email = partial.email;
+  if ('employeeId' in partial) patch.employee_id = partial.employeeId;
   if ('team' in partial) patch.team_id = partial.team || null;
   if ('department' in partial) patch.department = partial.department;
   if ('position' in partial) patch.position = partial.position;
@@ -164,11 +167,11 @@ export async function apiDeleteParticipantWithAuth(
   if (data?.error) throw new Error(data.error);
 }
 
-export async function apiFetchParticipantByEmail(email: string): Promise<Participant | null> {
+export async function apiFetchParticipantByEmployeeId(employeeId: string): Promise<Participant | null> {
   const { data, error } = await supabase
     .from('participants')
     .select('*')
-    .eq('email', email)
+    .eq('employee_id', employeeId.toUpperCase())
     .single();
   if (error) return null;
   return fromDB(data as DBParticipant);
