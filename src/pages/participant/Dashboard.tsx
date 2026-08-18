@@ -9,6 +9,7 @@ import { useSettings } from '../../hooks/useSettings';
 import { CheckCircle2, Clock, Crown, Lock, Plus, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { createParticipantWithAuth } from '../../data/hackathonStore';
+import { EMPLOYEE_ID_REGEX } from '../../api/participants';
 
 function Initials({ name }: { name: string }) {
   return (
@@ -20,12 +21,12 @@ function Initials({ name }: { name: string }) {
 
 interface AddMemberForm {
   name: string;
-  email: string;
+  employeeId: string;
   department: string;
   position: string;
 }
 
-const EMPTY_FORM: AddMemberForm = { name: '', email: '', department: '', position: '' };
+const EMPTY_FORM: AddMemberForm = { name: '', employeeId: '', department: '', position: '' };
 const MAX_TEAM_MEMBERS = 5;
 const TEAM_MEMBER_LIMIT_MESSAGE = `팀은 최대 ${MAX_TEAM_MEMBERS}명까지 구성할 수 있습니다.`;
 
@@ -84,17 +85,21 @@ export default function ParticipantDashboard() {
   };
 
   const handleAddMember = async () => {
-    if (!form.name.trim() || !form.email.trim()) {
-      setError('이름과 이메일은 필수입니다.');
+    if (!form.name.trim() || !form.employeeId.trim()) {
+      setError('이름과 사번은 필수입니다.');
+      return;
+    }
+    if (!EMPLOYEE_ID_REGEX.test(form.employeeId.trim())) {
+      setError('사번 형식이 올바르지 않습니다. (알파벳 1자 + 숫자 6자리)');
       return;
     }
     if (myMembers.length >= MAX_TEAM_MEMBERS) {
       setError(TEAM_MEMBER_LIMIT_MESSAGE);
       return;
     }
-    const emailLower = form.email.trim().toLowerCase();
-    if (participants.some((p) => p.email.toLowerCase() === emailLower)) {
-      setError('이미 등록된 이메일입니다.');
+    const normalizedId = form.employeeId.trim().toUpperCase();
+    if (participants.some((p) => p.employeeId.toUpperCase() === normalizedId)) {
+      setError('이미 등록된 사번입니다.');
       return;
     }
 
@@ -103,7 +108,7 @@ export default function ParticipantDashboard() {
     try {
       const createdParticipant = await createParticipantWithAuth({
         name: form.name.trim(),
-        email: form.email.trim(),
+        employeeId: normalizedId,
         department: form.department.trim(),
         position: form.position.trim(),
         team: team.id,
@@ -177,7 +182,7 @@ export default function ParticipantDashboard() {
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-400 truncate">{member.email}</p>
+                <p className="text-xs text-gray-400 truncate">{member.employeeId}</p>
               </div>
               <Badge status={member.status} />
             </div>
@@ -254,7 +259,7 @@ export default function ParticipantDashboard() {
             <div className="space-y-3">
               {[
                 { label: '이름', key: 'name', placeholder: '홍길동', required: true },
-                { label: '이메일', key: 'email', placeholder: 'hong@example.com', required: true },
+                { label: '사번', key: 'employeeId', placeholder: 'D사번', required: true },
                 { label: '부서', key: 'department', placeholder: '개발팀', required: false },
                 { label: '직급', key: 'position', placeholder: '대리', required: false },
               ].map(({ label, key, placeholder, required }) => (
@@ -263,7 +268,7 @@ export default function ParticipantDashboard() {
                     {label}{required && <span className="ml-0.5 text-red-400">*</span>}
                   </label>
                   <input
-                    type={key === 'email' ? 'email' : 'text'}
+                    type="text"
                     placeholder={placeholder}
                     value={form[key as keyof AddMemberForm]}
                     onChange={(e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))}
